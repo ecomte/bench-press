@@ -125,6 +125,31 @@ def game_state(game, today=None):
     return "pre"
 
 
+def game_left(game, gstate, now_et):
+    """Rough share of a game still to play: 1 before kickoff, 0 once final. Sleeper's schedule
+    has no game clock, so a live game's progress is guessed from the usual kickoff slots
+    (US Eastern): Monday/Thursday 8:15 PM; other days 1:00, 4:15 or 8:20 PM, whichever
+    fits; about 3h15m per game."""
+    if gstate == "final":
+        return 0.0
+    if gstate != "live":
+        return 1.0
+    try:
+        gd = dt.date.fromisoformat(game.get("date") or "")
+    except ValueError:
+        return 0.5
+    mins = (now_et.date() - gd).days * 1440 + now_et.hour * 60 + now_et.minute  # since midnight of game day
+    if gd.weekday() in (0, 3):
+        kick = 20 * 60 + 15
+    elif mins - 13 * 60 < 210:
+        kick = 13 * 60
+    elif mins < 20 * 60 + 20:
+        kick = 16 * 60 + 15
+    else:
+        kick = 20 * 60 + 20
+    return min(1.0, max(0.05, 1 - (mins - kick) / 195.0))
+
+
 def day_label(date_str):
     try:
         d = dt.date.fromisoformat(date_str)

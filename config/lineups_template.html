@@ -24,8 +24,20 @@ html,body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 var(--bo
 .eyebrow{font:500 12px var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--accent)}
 h1{font:800 54px/0.95 var(--display);margin:6px 0 4px;letter-spacing:.01em;text-transform:uppercase}
 h1 span{color:var(--accent)}
+h1 a{color:inherit;text-decoration:none}
+h1 a:hover{text-decoration:underline;text-decoration-color:var(--accent);text-underline-offset:6px}
 .tag{font:600 20px/1.1 var(--display);letter-spacing:.04em;text-transform:uppercase;color:var(--accent);margin:0 0 8px}
 .sub{color:var(--muted);margin:0;font-size:14px}
+.live{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:10px}
+.live button{background:var(--accent);color:var(--accent-ink);border:0;border-radius:999px;padding:8px 18px;font:700 14px var(--body);cursor:pointer}
+.live button:disabled{opacity:.6;cursor:wait}
+.live button{display:inline-flex;align-items:center;gap:6px}
+.live button svg{width:15px;height:15px}
+.live button.spin svg{animation:spin 1s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){.live button.spin svg{animation:none}}
+.live .msg{color:var(--muted);font-size:13px}
+.live .msg.err{color:var(--bad)}
 .byes{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px;align-items:center;font:12px var(--mono);color:var(--muted)}
 .chip{font:500 12px var(--mono);border:1px solid var(--line);border-radius:999px;padding:2px 8px;color:var(--ink)}
 .tabs{display:flex;gap:6px;flex-wrap:wrap;border-bottom:1px solid var(--line);padding-bottom:12px}
@@ -41,8 +53,16 @@ h1 span{color:var(--accent)}
 .board .side .t{font-weight:600;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .board .side .r{font:12px var(--mono);color:var(--muted)}
 .board .side .n{font:800 36px/1 var(--display)}
+.board .side .n.act{color:var(--good)}
+.board .side .pj{font:600 13px var(--mono);color:var(--muted);margin-top:4px}
+.board .side .gs{vertical-align:12px}
 .board .side.right{text-align:right}
 .board .vs{font:600 12px var(--mono);color:var(--dim)}
+.board .wp{grid-column:1/-1;display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:8px;font:700 12px var(--mono)}
+.board .wp .bar{display:flex;gap:2px;height:10px;border-radius:5px;overflow:hidden;background:var(--row2)}
+.board .wp .up{background:var(--good);color:var(--good)}
+.board .wp .down{background:var(--bad);color:var(--bad)}
+.board .wp span.up,.board .wp span.down{background:none}
 .board .note{grid-column:1/-1;font:12px var(--mono);color:var(--muted);border-top:1px solid var(--line);padding-top:8px}
 .seg{display:inline-flex;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:3px;gap:2px;align-self:flex-start;flex-wrap:wrap}
 .seg button{background:transparent;border:0;color:var(--muted);font:600 13px var(--body);padding:6px 12px;border-radius:8px;cursor:pointer}
@@ -92,6 +112,8 @@ h1 span{color:var(--accent)}
   .sample{background:rgba(242,163,58,.14);border:1px solid var(--accent);color:var(--ink);border-radius:10px;padding:10px 14px;font-size:14px}
 .sample code{font-family:var(--mono)}
 footer{font-size:12px;color:var(--dim);border-top:1px solid var(--line);padding-top:12px}
+.tip .tag{margin-bottom:6px}
+.tip a{color:var(--accent);font-weight:600}
 @media (max-width:520px){
   h1{font-size:42px}
   .prow{grid-template-columns:38px 34px minmax(0,1fr) auto;gap:9px;padding:10px 12px}
@@ -108,15 +130,21 @@ footer{font-size:12px;color:var(--dim);border-top:1px solid var(--line);padding-
     <h1>Bench <span>Press</span></h1>
     <p class="tag">Let's eat a W.</p>
     <p class="sub" id="sub"></p>
+    <div class="live" id="live" hidden><button id="refresh" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 0 1-15.5 6.2L3 16"/><path d="M3 21v-5h5"/><path d="M3 12a9 9 0 0 1 15.5-6.2L21 8"/><path d="M21 3v5h-5"/></svg><span>Refresh</span></button><span class="msg" id="liveMsg" role="status"></span></div>
     <div class="byes" id="byes"></div>
   </header>
   <nav class="tabs" id="tabs" role="tablist"></nav>
   <div class="sample" id="sample" hidden>Sample data: these are made-up test players, not your real rosters. Run <code>python3 benchpress.py</code> on your Mac and this fills in.</div>
   <main id="panel" style="display:flex;flex-direction:column;gap:16px"></main>
+  <section class="tip">
+    <p class="tag">Eating W's?</p>
+    <p class="sub">This page was built purely out of love and passion for the game. If you feel like showing appreciation, Venmo E at <a href="https://venmo.com/u/EComte" target="_blank" rel="noopener">@EComte</a>.</p>
+  </section>
   <footer id="foot"></footer>
 </div>
+<!--__LIVE__-->
 <script>
-const DATA = /*__DATA__*/null;
+let DATA = /*__DATA__*/null;
 const NO_IMG = /*__NOIMG__*/false;
 const PHOTOS = /*__PHOTOS__*/{};
 const $ = (s) => document.querySelector(s);
@@ -183,11 +211,31 @@ function row(slot, label, p, opts) {
     '</div>';
 }
 
+// Estimated chance to win: the projected margin against how much scoring is still to come.
+// The margin still to come is treated as roughly normal with variance ~6x the points left
+// for both teams (about a 38-point spread over a full week), so the bar firms up as games finish.
+// Tuned against Sleeper's own percentages; Sleeper doesn't publish its formula.
+function winPct(myLive, myProj, oLive, oProj) {
+  const left = Math.max(0, myProj - myLive) + Math.max(0, oProj - oLive);
+  const diff = myProj - oProj;
+  const sd = Math.sqrt(6 * left);
+  if (sd < 0.5) return diff > 0 ? 100 : diff < 0 ? 0 : 50;
+  const z = diff / (sd * Math.SQRT2), t = 1 / (1 + 0.3275911 * Math.abs(z));
+  const erf = 1 - (((((1.061405429 * t - 1.453152027) * t) + 1.421413741) * t - 0.284496736) * t + 0.254829592) * t * Math.exp(-z * z);
+  // never show a sure thing (100% / 0%) while points are still left to play
+  return Math.min(99, Math.max(1, 50 * (1 + (z < 0 ? -erf : erf))));
+}
+
 function render() {
+  if (DATA.placeholder) {  // live page before its first refresh
+    $("#eyebrow").textContent = "Sleeper";
+    $("#sub").textContent = DATA.username ? "Loading " + DATA.username + "'s lineups from Sleeper..." : "Add ?u=<Sleeper username> to the address to load someone's lineups.";
+    return;
+  }
   $("#sample").hidden = !DATA.sample;
   $("#eyebrow").textContent = "Sleeper · " + (DATA.owner ? DATA.owner + " · " : "") + DATA.season + " · Week " + DATA.week;
   document.title = "Bench Press" + (DATA.owner ? " · " + DATA.owner : "");
-  $("#sub").textContent = "Built " + DATA.generated + " from Sleeper stats (weeks " + (DATA.stats_weeks.join(", ") || "none") + ") and this week's projections.";
+  $("#sub").textContent = "Built " + DATA.generated + " from Sleeper current season stats and this week's projections.";
   $("#byes").innerHTML = "Byes: " + (DATA.byes.length ? DATA.byes.map(t => '<span class="chip">' + esc(t) + '</span>').join("") : "none");
   $("#tabs").innerHTML = DATA.leagues.map(l => {
     const n = l.alerts.filter(a => a.level === "bad" || a.level === "change").length;
@@ -202,11 +250,27 @@ function render() {
   const myProj = mode === "rec" ? L.proj_rec : mode === "sleeper" ? L.proj_rec_sleeper : L.proj_cur;
   let h = '<div class="head"><h2>' + esc(L.name) + '</h2><div class="fmt">' + esc(L.format) + '</div>' +
     '<div class="me">' + esc(L.team_name) + ' · ' + esc(L.record) + ' · ' + L.pf + ' PF</div></div>';
-  h += '<div class="board"><div class="side"><div class="t">You</div><div class="n">' + myProj.toFixed(1) + '</div><div class="r">' +
-    esc(MODES.find(m => m[0] === mode)[1].toLowerCase()) + '</div></div><div class="vs">VS</div>' +
-    '<div class="side right"><div class="t">' + esc(o ? o.team : "No matchup") + '</div><div class="n">' + (o ? o.proj.toFixed(1) : "–") +
-    '</div><div class="r">' + esc(o ? o.owner + " · " + o.record : "") + '</div></div>' +
-    '<div class="note">' + (L.any_locked ? 'Totals use real points for games already played. ' : '') + 'Recommended ' + L.proj_rec.toFixed(1) + ' (adj) · Sleeper-only best ' + L.proj_rec_sleeper.toFixed(1) +
+  // Once any game in the matchup has started, the big numbers are real points so far
+  // and the projected final (real points + projections for players yet to play) sits underneath.
+  const started = L.any_locked || !!(o && o.started);
+  const score = (live, proj) => started
+    ? '<div class="n act">' + (live || 0).toFixed(1) + '</div><div class="pj">proj ' + proj.toFixed(1) + '</div>'
+    : '<div class="n">' + proj.toFixed(1) + '</div>';
+  h += '<div class="board"><div class="side"><div class="t">You</div>' + score(L.live_pts, myProj) + '<div class="r">' +
+    esc(MODES.find(m => m[0] === mode)[1].toLowerCase()) + '</div></div><div class="vs">' + (started ? '<span class="gs live">LIVE</span>' : '') + 'VS</div>' +
+    '<div class="side right"><div class="t">' + esc(o ? o.team : "No matchup") + '</div>' + (o ? score(o.live, o.proj) : '<div class="n">–</div>') +
+    '<div class="r">' + esc(o ? o.owner + " · " + o.record : "") + '</div></div>' +
+    (o ? (() => {
+      const p = winPct(started ? (L.live_pts || 0) : 0, myProj, started ? (o.live || 0) : 0, o.proj);
+      const me = Math.round(p), them = 100 - me;
+      // green for whoever is favored, red for the underdog (an even game shows both green)
+      const mine = me >= 50 ? "up" : "down", theirs = them >= 50 ? "up" : "down";
+      return '<div class="wp" title="Estimated chance to win, from the projected totals and how much is left to play">' +
+        '<span class="' + mine + '">' + me + '%</span><div class="bar" role="img" aria-label="Win chance: you ' + me + '%, ' + esc(o.team) + ' ' + them + '%">' +
+        '<div class="' + mine + '" style="width:' + p.toFixed(1) + '%"></div><div class="' + theirs + '" style="width:' + (100 - p).toFixed(1) + '%"></div></div>' +
+        '<span class="' + theirs + '">' + them + '%</span></div>';
+    })() : '') +
+    '<div class="note">' + (started ? 'Green totals are real points so far; "proj" adds projections for players yet to play and for what\'s left of games in progress. ' : '') + 'Recommended ' + L.proj_rec.toFixed(1) + ' (adj) · Sleeper-only best ' + L.proj_rec_sleeper.toFixed(1) +
     ' · Your current lineup ' + L.proj_cur.toFixed(1) + ' (Sleeper proj)</div></div>';
   h += '<div class="seg" role="group">' + MODES.map(m => '<button data-m="' + m[0] + '" aria-pressed="' + (mode === m[0]) + '">' + m[1] + '</button>').join("") + '</div>';
   if (L.alerts.length) {
@@ -244,9 +308,44 @@ function render() {
     'Orange rows are changes from your current Sleeper lineup. <span style="color:var(--good)">Green numbers</span> are real points from games already played (FINAL) or in progress (LIVE), with the projection underneath. Those players are locked, so they\'re never moved.</p>';
   $("#panel").innerHTML = h;
   document.querySelectorAll(".seg button").forEach(b => b.onclick = () => { mode = b.dataset.m; store.set("mode", mode); render(); });
-  $("#foot").textContent = "Read-only: Sleeper's API can't change lineups, so make swaps in the app. Re-run python3 benchpress.py to refresh.";
+  $("#foot").textContent = "Read-only: Sleeper's API can't change lineups, so make swaps in the app" +
+    (window.BenchPress ? " and refresh Bench Press to view updated lineups." : ". Re-run python3 benchpress.py to refresh.");
+}
+
+// Hosted copy only: benchpress.js rebuilds the page from live Sleeper data.
+function setupRefresh() {
+  if (!window.BenchPress) return;
+  const qs = new URLSearchParams(location.search).get("u");
+  if (qs) DATA.username = qs.replace(/^@/, "");
+  const btn = $("#refresh"), msg = $("#liveMsg");
+  $("#live").hidden = false;
+  const storage = {
+    getItem(k) { try { return localStorage.getItem(k); } catch (e) { return null; } },
+    setItem(k, v) { try { localStorage.setItem(k, v); } catch (e) {} }
+  };
+  async function refresh() {
+    if (!DATA.username) return;
+    const label = btn.querySelector("span");
+    btn.disabled = true; btn.classList.add("spin"); label.textContent = "Refreshing...";
+    msg.className = "msg"; msg.textContent = "";
+    try {
+      const d = await BenchPress.build({ username: DATA.username, base: new URL("..", location.href).href, storage });
+      DATA = d;
+      if (!DATA.leagues.some(l => l.id === tab)) tab = DATA.leagues[0] && DATA.leagues[0].id;
+      render();
+      msg.textContent = "Live from Sleeper";
+    } catch (e) {
+      msg.className = "msg err";
+      msg.textContent = "Couldn't refresh: " + (e && e.message ? e.message : e);
+    } finally {
+      btn.disabled = false; btn.classList.remove("spin"); label.textContent = "Refresh";
+    }
+  }
+  btn.onclick = refresh;
+  if (DATA.placeholder && DATA.username) refresh();
 }
 render();
+setupRefresh();
 </script>
 </body>
 </html>

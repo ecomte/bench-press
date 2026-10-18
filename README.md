@@ -1,6 +1,8 @@
 # Bench Press
 
-[![Release](https://img.shields.io/badge/release-v0.1.0-orange)](https://github.com/ecomte/bench-press/releases)
+[![Release](https://img.shields.io/badge/release-v1.0.0-green)](https://github.com/ecomte/bench-press/releases)
+
+**Open Bench Press: [ecomte.github.io/bench-press](https://ecomte.github.io/bench-press/)**. Search your Sleeper username to see your lineups.
 
 > Let's eat a W.
 
@@ -13,7 +15,7 @@ This repository is the GitHub version of Bench Press. It began as a set of scrip
 | Phase | What it delivers | State |
 |---|---|---|
 | 1. Scheduled builds | GitHub Actions runs the Python on a schedule and deploys one page per person to GitHub Pages. | Released in 0.1.0 (beta) |
-| 2. Live refresh | A Refresh button that rebuilds the lineup in the browser from live Sleeper data, for any username (`?u=<name>`). | Planned |
+| 2. Live refresh | A Refresh button that rebuilds the lineup in the browser from live Sleeper data, for any username (`?u=<name>`). | In progress (BP-3) |
 
 The design, the trade-offs, and the open questions (such as whether Sleeper's projections endpoint allows browser calls) are in [docs/static-site-plan.md](docs/static-site-plan.md).
 
@@ -25,9 +27,12 @@ Sleeper API ──► GitHub Actions (scheduled) ──► benchpress.py for eac
 ```
 
 - **Hosting:** GitHub Pages, deployed from GitHub Actions. Each person gets `https://ecomte.github.io/bench-press/<username>/`, and each page keeps one tab per league.
-- **Schedule (US Eastern):** hourly Tuesday through Saturday, every 15 minutes on Sunday from noon to midnight, plus Monday and Thursday nights. A build can also be started by hand from the Actions tab.
+- **Refresh button:** each hosted page has a **Refresh** button that rebuilds the lineup on the phone from live Sleeper data (`web/benchpress.js`). The scheduled build publishes the slow-changing data it needs (player list, defense-vs-position ranks, game logs) to `data/` on the site, so a tap only fetches this week's rosters, projections and live points. If a browser can't reach Sleeper's app endpoints, it uses the build's copies in `data/`.
+- **Landing page:** a Sleeper username search. A name with a built page links straight to it; any other name gets a link to `live/?u=<username>`, which builds that person's page on the spot.
+- **Schedule (US Eastern):** hourly from 7 AM to midnight with one overnight build at 4 AM, and every 15 minutes during games: Sunday from noon to midnight, plus Monday and Thursday nights. A build can also be started by hand from the Actions tab.
 - **Secrets:** none. Sleeper's API is public and read-only, and everything in this repo is already public on Sleeper.
 - **Users:** the people built on each run are listed in `batch_users` in `config/config.json`. Adding a friend is a one-line change.
+- **Parity check:** every build replays its Sleeper responses through the JavaScript and compares lineups, totals and alerts with the Python. It's non-blocking, so a mismatch shows as a warning on the run without stopping the pages from updating.
 - **Workflow:** `.github/workflows/build.yml`. Builds run on any branch so a feature branch can be checked from the Actions tab; only `main` deploys.
 - **Branches:** `main` is what's deployed. Work happens on `feature/BP-<n>-...` branches and merges through `develop`.
 
@@ -87,6 +92,9 @@ Alerts on the page are **Fix** (empty slot or an unavailable starter), **Swap** 
 | `python-subscripts/sleeper.py` | Sleeper API client with on-disk caching. |
 | `python-subscripts/analysis.py` | Scoring, defense-vs-position ranks and the lineup optimizer. |
 | `python-subscripts/render.py` | The weekly report and the lineup page. |
+| `python-subscripts/sitedata.py` | Writes the shared data files the Refresh button reads. |
+| `web/benchpress.js` | The Refresh button's lineup builder, a JavaScript port of the per-week logic. |
+| `tools/parity.js` | Replays the build's Sleeper responses through `web/benchpress.js` and checks it picks the same lineups as the Python. |
 | `config/lineups_template.html` | The look of the lineup page. |
 | `docs/` | Design notes, starting with the static-site plan. |
 
@@ -103,7 +111,7 @@ The API is read-only, so lineup changes are made in the Sleeper app.
 
 - Phase 1: Actions workflow, a `--site` output option, and Pages deploy (BP-1).
 - An Ohio Fantasy rebuild mode, as a per-league setting that favors young players and long-term value.
-- Phase 2: the live Refresh button, checked against the Python output.
+- Phase 2: the live Refresh button, checked against the Python output (BP-3, in progress).
 
 ## License
 
