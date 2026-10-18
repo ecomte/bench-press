@@ -1,5 +1,7 @@
 # Bench Press
 
+[![Release](https://img.shields.io/badge/release-v0.1.0-orange)](https://github.com/ecomte/bench-press/releases)
+
 > Let's eat a W.
 
 Fantasy football lineup suggestions for Sleeper leagues. Bench Press pulls your rosters from the Sleeper API, re-scores Sleeper's projections with each league's rules, adjusts them for the opposing defense, and recommends a starting lineup for every team you own. It flags byes, injuries, empty slots and close calls, then renders a tabbed, Sleeper-style lineup page.
@@ -10,7 +12,7 @@ This repository is the GitHub version of Bench Press. It began as a set of scrip
 
 | Phase | What it delivers | State |
 |---|---|---|
-| 1. Scheduled builds | GitHub Actions runs the Python on a schedule and deploys one page per person to GitHub Pages. | In progress (BP-1) |
+| 1. Scheduled builds | GitHub Actions runs the Python on a schedule and deploys one page per person to GitHub Pages. | Released in 0.1.0 (beta) |
 | 2. Live refresh | A Refresh button that rebuilds the lineup in the browser from live Sleeper data, for any username (`?u=<name>`). | Planned |
 
 The design, the trade-offs, and the open questions (such as whether Sleeper's projections endpoint allows browser calls) are in [docs/static-site-plan.md](docs/static-site-plan.md).
