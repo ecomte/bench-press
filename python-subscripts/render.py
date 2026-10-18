@@ -93,6 +93,8 @@ def page_html(d, live=False):
     blob = json.dumps(d).replace("</", "<\\/")
     if live:
         tpl = tpl.replace("<!--__LIVE__-->", '<script src="../benchpress.js"></script>')
+        # hosted pages live at <site>/<user>/ and <site>/live/, so ../ is the landing page
+        tpl = tpl.replace("<h1>Bench <span>Press</span></h1>", '<h1><a href="../" title="Back to search">Bench <span>Press</span></a></h1>')
     return tpl.replace("/*__DATA__*/null", blob)
 
 
@@ -130,7 +132,7 @@ def landing_html(users):
 <div class="wrap">
   <header>
     <div class="eyebrow">Sleeper lineup helper</div>
-    <h1>Bench <span>Press</span></h1>
+    <h1><a href="./" title="Bench Press home">Bench <span>Press</span></a></h1>
     <p class="tag">Let's eat a W.</p>
     <p class="sub">Search your Sleeper username to open your lineups.</p>
   </header>
@@ -140,7 +142,7 @@ def landing_html(users):
   </form>
   <div class="result" id="result" hidden aria-live="polite"></div>
   %s
-  <footer>Read-only: Sleeper's API can't change lineups, so make swaps in the app.</footer>
+  <footer>Read-only: Sleeper's API can't change lineups, so make swaps in the app and refresh Bench Press to view updated lineups.</footer>
 </div>
 <script>
 const PEOPLE = %s;
