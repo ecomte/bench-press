@@ -61,7 +61,7 @@ def main():
         results.append((user, code, time.time() - start))
 
     if args.site:
-        write_site_index(args.site, [u for u, c, _ in results if c == 0])
+        write_site_index(args.site, [u for u, c, _ in results if c == 0], cfg.get("ntfy_topic"))
 
     print("\n" + "=" * 64)
     print("Batch done")
@@ -75,7 +75,7 @@ def main():
     sys.exit(1 if failed else 0)
 
 
-def write_site_index(site, users):
+def write_site_index(site, users, ntfy_topic=None):
     """Landing page for the hosted site (a username search that links to the pages that built),
     the live/?u=<name> page for anyone else, and the shared refresh script."""
     import shutil
@@ -85,7 +85,7 @@ def write_site_index(site, users):
     with open(os.path.join(site, "live", "index.html"), "w") as f:
         f.write(render.live_page_html())
     shutil.copy(os.path.join(HERE, "web", "benchpress.js"), os.path.join(site, "benchpress.js"))
-    page = render.landing_html(users)
+    page = render.landing_html(users, ntfy_topic)
     os.makedirs(site, exist_ok=True)
     with open(os.path.join(site, "index.html"), "w") as f:
         f.write(page)

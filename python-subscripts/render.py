@@ -114,9 +114,10 @@ def page_html(d, live=False):
     return tpl.replace("/*__DATA__*/null", blob)
 
 
-def landing_html(users):
+def landing_html(users, ntfy_topic=None):
     """The hosted site's front page: same look as the lineup pages, with a Sleeper username
-    search. A name with a built page links to it; any other name gets a live/?u= link."""
+    search. A name with a built page links to it; any other name gets a live/?u= link.
+    ntfy_topic: when set, opening a live page from here sends the owner a phone notification."""
     import html as H
     import re
     with open(os.path.join(ROOT, "config", "lineups_template.html")) as f:
@@ -165,6 +166,7 @@ def landing_html(users):
 </div>
 <script>
 const PEOPLE = %s;
+const NTFY = %s;  // ntfy_topic in config/config.json; "" turns the new-user notification off
 const esc = (s) => String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const getJSON = async (url) => { const r = await fetch(url); return r.ok ? r.json() : null; };
 let STATIC;  // season and ignored leagues, from the site's own data
@@ -216,11 +218,23 @@ document.getElementById("find").onsubmit = async (e) => {
   if (hit) { box.innerHTML = card(user, leagues, encodeURIComponent(hit.tag) + "/", hit.name); return; }
   box.innerHTML = card(user, leagues, "live/?u=" + encodeURIComponent(q), q)
     + '<p class="msg" style="margin-top:10px">No saved page yet, so this one builds live from Sleeper.</p>';
+  box.querySelector(".btn").addEventListener("click", () => notifyOwner(q, leagues));
 };
+// The first time this device opens a live page for a name with no saved page, tell the owner's
+// phone through the free ntfy app. It's fire-and-forget, so the visitor sees no difference.
+function notifyOwner(name, leagues) {
+  if (!NTFY) return;
+  const key = "benchpress.notified." + name.toLowerCase();
+  try { if (localStorage.getItem(key)) return; localStorage.setItem(key, "1"); } catch (e) {}
+  const n = leagues ? leagues.length : null;
+  const msg = "New Bench Press user: " + name + (n === null ? "" : " (" + n + " league" + (n === 1 ? "" : "s") + ")");
+  const url = "https://ntfy.sh/" + encodeURIComponent(NTFY) + "?title=" + encodeURIComponent("Bench Press") + "&tags=football";
+  try { navigator.sendBeacon(url, msg); } catch (e) {}
+}
 </script>
 </body>
 </html>
-""" % (head, tip, version_html(), people)
+""" % (head, tip, version_html(), people, json.dumps(ntfy_topic or ""))
 
 
 def live_page_html():
