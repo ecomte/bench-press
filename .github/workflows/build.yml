@@ -1,0 +1,71 @@
+# Builds every lineup page in batch_users and publishes them to GitHub Pages.
+# Runs on a schedule (times below are UTC; US Eastern is UTC-4 in EDT, UTC-5 in EST),
+# on pushes to main, and by hand from the Actions tab ("Run workflow").
+# Builds run on any branch so a feature branch can be checked; only main deploys.
+name: Build and deploy lineups
+
+on:
+  schedule:
+    - cron: "0 * * * 2-6"        # hourly, Tue-Sat
+    - cron: "*/15 16-23 * * 0"   # every 15 min, Sunday noon to 8 PM ET
+    - cron: "*/15 0-4 * * 1"     # every 15 min, Sunday 8 PM to midnight ET
+    - cron: "*/15 23 * * 1,4"    # Monday and Thursday night games, 7 PM ET...
+    - cron: "*/15 0-4 * * 2,5"   # ...to midnight ET
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      week:
+        description: "Week to build (blank = next week with games left)"
+        required: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # Sleeper API cache (player list, finished weeks' stats) plus roster snapshots,
+      # so each run downloads less and can still spot adds and drops.
+      - name: Restore Sleeper cache
+        uses: actions/cache@v4
+        with:
+          path: data
+          key: sleeper-data-${{ github.run_id }}
+          restore-keys: sleeper-data-
+
+      - name: Build pages
+        env:
+          WEEK: ${{ github.event.inputs.week }}
+        run: |
+          python3 batchbenchpress.py --no-open --site site ${WEEK:+-w "$WEEK"}
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  deploy:
+    if: github.ref == 'refs/heads/main'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

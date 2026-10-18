@@ -218,3 +218,12 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# macOS
+.DS_Store
+
+# Bench Press: generated output and API cache (rebuilt on every run)
+data/
+lineups/
+sheets/
+reports/
