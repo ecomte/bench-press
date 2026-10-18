@@ -86,6 +86,19 @@ def report_md(d, dvp):
     return "\n".join(L)
 
 
+def version_html():
+    """Version and copyright line under the footer. The version is read from the release badge
+    at the top of README.md, which is bumped by hand on each release branch."""
+    import re
+    try:
+        with open(os.path.join(ROOT, "README.md")) as f:
+            m = re.search(r"img\.shields\.io/badge/release-v([0-9][^-)]*)", f.read())
+    except OSError:
+        m = None
+    ver = "Bench Press Version: %s<br>" % m.group(1) if m else ""
+    return ver + "Copyright &copy; 2026 E Comte"
+
+
 def page_html(d, live=False):
     """live=True: the hosted copy, which loads ../benchpress.js and gets a Refresh button."""
     with open(os.path.join(ROOT, "config", "lineups_template.html")) as f:
@@ -95,6 +108,7 @@ def page_html(d, live=False):
         tpl = tpl.replace("<!--__LIVE__-->", '<script src="../benchpress.js"></script>')
         # hosted pages live at <site>/<user>/ and <site>/live/, so ../ is the landing page
         tpl = tpl.replace("<h1>Bench <span>Press</span></h1>", '<h1><a href="../" title="Back to search">Bench <span>Press</span></a></h1>')
+    tpl = tpl.replace("<!--__VERSION__-->", version_html())
     return tpl.replace("/*__DATA__*/null", blob)
 
 
@@ -143,6 +157,7 @@ def landing_html(users):
   <div class="result" id="result" hidden aria-live="polite"></div>
   %s
   <footer>Read-only: Sleeper's API can't change lineups, so make swaps in the app and refresh Bench Press to view updated lineups.</footer>
+  <div class="ver">%s</div>
 </div>
 <script>
 const PEOPLE = %s;
@@ -201,7 +216,7 @@ document.getElementById("find").onsubmit = async (e) => {
 </script>
 </body>
 </html>
-""" % (head, tip, people)
+""" % (head, tip, version_html(), people)
 
 
 def live_page_html():
