@@ -522,7 +522,7 @@
       user_sheets: "sheets/" + tag + "/",
       season, week, byes: byesNow, matchup_weight: W,
       stats_weeks: stat.stats_weeks || [], leagues: outLeagues,
-      username: tag, live: true,
+      username: tag, live: true, built_at: now.getTime() / 1000,
     };
   }
 
