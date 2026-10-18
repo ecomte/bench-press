@@ -1,6 +1,6 @@
 # Bench Press as a free static site: plan
 
-Written 2026-10-18. Nothing is built yet, and no existing code was changed.
+Written 2026-10-18. Phase 1 shipped in 0.1.0. Phase 2 (the Refresh button) is being built in BP-3: `web/benchpress.js`, `python-subscripts/sitedata.py`, `tools/parity.js`. The browser-call fallback below is built in, and Sleeper's CORS behavior is still unverified on a real phone.
 
 ## The goal
 

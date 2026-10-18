@@ -6,7 +6,7 @@ name: Build and deploy lineups
 
 on:
   schedule:
-    - cron: "0 * * * 2-6"        # hourly, Tue-Sat
+    - cron: "0 * * * *"          # hourly, every day
     - cron: "*/15 16-23 * * 0"   # every 15 min, Sunday noon to 8 PM ET
     - cron: "*/15 0-4 * * 1"     # every 15 min, Sunday 8 PM to midnight ET
     - cron: "*/15 23 * * 1,4"    # Monday and Thursday night games, 7 PM ET...
@@ -49,8 +49,17 @@ jobs:
       - name: Build pages
         env:
           WEEK: ${{ github.event.inputs.week }}
+          FF_RECORD: ${{ runner.temp }}/sleeper-responses   # replayed by the parity check
         run: |
           python3 batchbenchpress.py --no-open --site site ${WEEK:+-w "$WEEK"}
+
+      # Does the Refresh button (web/benchpress.js) pick the same lineups as the Python?
+      # Non-blocking so a JavaScript slip never stops the pages from updating; a failure
+      # shows as a warning on the run with the differences in the log.
+      - name: Parity check (Python vs JavaScript)
+        continue-on-error: true
+        run: |
+          node tools/parity.js site "$RUNNER_TEMP/sleeper-responses" data
 
       - uses: actions/upload-pages-artifact@v3
         with:

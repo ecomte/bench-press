@@ -23,6 +23,9 @@ CACHE = os.path.join(ROOT, "data", "cache")
 
 # Set FF_FIXTURES=/path/to/dir to read canned responses instead of the network (testing).
 FIXTURES = os.environ.get("FF_FIXTURES")
+# Set FF_RECORD=/path/to/dir to save every response under its fixture name (the build's
+# Python vs JavaScript parity check replays them).
+RECORD = os.environ.get("FF_RECORD")
 
 
 def _fixture_name(url):
@@ -64,6 +67,15 @@ def _fetch(url, tries=3):
 def get(url, cache_file=None, max_age_hours=None):
     """GET JSON. With cache_file, reuse the saved copy if it's younger than max_age_hours
     (None = keep forever). Falls back to a stale cached copy if the network fails."""
+    data = _get(url, cache_file, max_age_hours)
+    if RECORD and data is not None:
+        os.makedirs(RECORD, exist_ok=True)
+        with open(os.path.join(RECORD, _fixture_name(url)), "w") as f:
+            json.dump(data, f)
+    return data
+
+
+def _get(url, cache_file, max_age_hours):
     path = os.path.join(CACHE, cache_file) if cache_file else None
     if path and os.path.exists(path):
         age_h = (time.time() - os.path.getmtime(path)) / 3600.0

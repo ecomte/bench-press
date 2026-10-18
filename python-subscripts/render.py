@@ -86,11 +86,19 @@ def report_md(d, dvp):
     return "\n".join(L)
 
 
-def page_html(d):
+def page_html(d, live=False):
+    """live=True: the hosted copy, which loads ../benchpress.js and gets a Refresh button."""
     with open(os.path.join(ROOT, "config", "lineups_template.html")) as f:
         tpl = f.read()
     blob = json.dumps(d).replace("</", "<\\/")
+    if live:
+        tpl = tpl.replace("<!--__LIVE__-->", '<script src="../benchpress.js"></script>')
     return tpl.replace("/*__DATA__*/null", blob)
+
+
+def live_page_html():
+    """The hosted live/ page: no build data, just the Refresh logic. It loads whoever is named in ?u=."""
+    return page_html({"placeholder": True, "leagues": [], "username": None, "matchup_weight": 0.5}, live=True)
 
 
 def artifact_html(d, photos=None):
