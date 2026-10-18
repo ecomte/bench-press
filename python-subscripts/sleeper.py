@@ -16,7 +16,7 @@ import urllib.request
 
 V1 = "https://api.sleeper.app/v1"
 APP = "https://api.sleeper.com"
-POSITIONS = ["QB", "RB", "WR", "TE", "K", "DEF"]
+POSITIONS = ["QB", "RB", "WR", "TE", "K", "DEF", "DL", "LB", "DB"]
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # the fantasy-football folder
 CACHE = os.path.join(ROOT, "data", "cache")
@@ -174,12 +174,13 @@ def week_stats(season, week, final=True, max_age_hours=6):
     the most recent week is refreshed every few hours (stat corrections land Tue/Wed), and the
     week in progress is refreshed on almost every run (max_age_hours=0.1) for live/final points."""
     url = "%s/stats/nfl/%s/%s?season_type=regular&%s" % (APP, season, week, _pos_query())
-    return get(url, "stats_%s_w%02d.json" % (season, week), max_age_hours=None if final else max_age_hours) or []
+    # "_idp": caches from before IDP support only hold offense and team defenses
+    return get(url, "stats_%s_w%02d_idp.json" % (season, week), max_age_hours=None if final else max_age_hours) or []
 
 
 def week_projections(season, week):
     url = "%s/projections/nfl/%s/%s?season_type=regular&%s" % (APP, season, week, _pos_query())
-    return get(url, "proj_%s_w%02d.json" % (season, week), max_age_hours=1) or []
+    return get(url, "proj_%s_w%02d_idp.json" % (season, week), max_age_hours=1) or []
 
 
 def schedule(season):

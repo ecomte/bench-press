@@ -1,6 +1,6 @@
 # Bench Press
 
-[![Release](https://img.shields.io/badge/release-v1.0.1-green)](https://github.com/ecomte/bench-press/releases)
+[![Release](https://img.shields.io/badge/release-v1.1.0-green)](https://github.com/ecomte/bench-press/releases)
 
 **Open Bench Press: [ecomte.github.io/bench-press](https://ecomte.github.io/bench-press/)**. Search your Sleeper username to see your lineups.
 
@@ -29,6 +29,7 @@ Sleeper API ──► GitHub Actions (scheduled) ──► benchpress.py for eac
 - **Hosting:** GitHub Pages, deployed from GitHub Actions. Each person gets `https://ecomte.github.io/bench-press/<username>/`, and each page keeps one tab per league.
 - **Refresh button:** each hosted page has a **Refresh** button that rebuilds the lineup on the phone from live Sleeper data (`web/benchpress.js`). The scheduled build publishes the slow-changing data it needs (player list, defense-vs-position ranks, game logs) to `data/` on the site, so a tap only fetches this week's rosters, projections and live points. If a browser can't reach Sleeper's app endpoints, it uses the build's copies in `data/`.
 - **Landing page:** a Sleeper username search. A name with a built page links straight to it; any other name gets a link to `live/?u=<username>`, which builds that person's page on the spot.
+- **New-user alerts:** the first time a device opens a live page from the search for a name with no saved page, the landing page quietly sends a phone notification through the free [ntfy](https://ntfy.sh) app (topic `ntfy_topic` in `config/config.json`; leave it empty to turn this off). The visitor sees no difference. Anyone who knows the topic can post to it, so change it if it ever gets spammed.
 - **Schedule (US Eastern):** hourly from 7 AM to midnight with one overnight build at 4 AM, and every 15 minutes during games: Sunday from noon to midnight, plus Monday and Thursday nights. A build can also be started by hand from the Actions tab.
 - **Secrets:** none. Sleeper's API is public and read-only, and everything in this repo is already public on Sleeper.
 - **Users:** the people built on each run are listed in `batch_users` in `config/config.json`. Adding a friend is a one-line change.
@@ -55,7 +56,7 @@ The first run takes about 20 seconds, because it downloads Sleeper's 5 MB player
 |---|---|
 | `lineups/lineups-<username>.html` | The tabbed lineup page, which opens offline. Toggle between **Recommended**, **Sleeper proj only** and **Current in Sleeper**. |
 | `reports/<season>_weekNN.md` | The same information as text, including alerts, lineup tables, injury context, and the toughest and easiest defenses by position. |
-| `sheets/*.csv` | Position sheets (QB, RB, WR, TE, K, DEF) and `DEF_vs_POS.csv`, shared by everyone who was run. |
+| `sheets/*.csv` | Position sheets (QB, RB, WR, TE, K, DEF, and IDP for every DL, LB and DB) and `DEF_vs_POS.csv`, shared by everyone who was run. IDP points in the sheets use a typical IDP scoring (`IDP_SCORING` in `analysis.py`); lineups always use each league's own. |
 | `sheets/<username>/` | That person's `lineups.csv` and `game_log.csv`. |
 | `data/` | API cache, roster snapshots and headshots. It's safe to delete and rebuilds itself. |
 
@@ -66,7 +67,7 @@ The first run takes about 20 seconds, because it downloads Sleeper's 5 MB player
 1. **Projection.** Sleeper's weekly projection, re-scored with each league's scoring (half or full PPR, 6-point passing TDs, TE premium).
 2. **Matchup adjustment.** Each defense's points allowed to the position, compared with the league average and shrunk toward average for small samples. The projection moves 50% of the way toward that, set by `matchup_weight` in `config/config.json`, because Sleeper already accounts for matchups somewhat.
 3. **Availability.** Players on BYE or listed Out, IR, PUP or suspended are excluded. Doubtful players count at 25%, and Questionable players count in full but get flagged.
-4. **Filling slots.** Fixed positions are filled first, then FLEX, then Superflex, each with the best available player. IR, taxi and IDP slots are left alone.
+4. **Filling slots.** Fixed positions are filled first, then FLEX, then Superflex, each with the best available player. IDP slots (DL, LB, DB and IDP flex) are filled the same way; a defender Sleeper lists at two spots (DL and LB) can fill either. A defender with no Sleeper projection uses his season average in that league's scoring, and his matchup is how many IDP points the offense he faces gives up to his position. IR and taxi slots are left alone.
 5. **Locked games.** Once a player's game kicks off, he stays where he is, and the page shows his real points (LIVE or FINAL).
 
 Alerts on the page are **Fix** (empty slot or an unavailable starter), **Swap** (the recommended changes), **Watch** (Questionable starters, or a starter whose QB is out), **Your call** (Sleeper's projections and the matchup data disagree) and **Note** (tough matchups, early games, open IR spots, roster changes).
@@ -81,6 +82,7 @@ Alerts on the page are **Fix** (empty slot or an unavailable starter), **Swap** 
 | `matchup_weight` | 0 means pure Sleeper projections, and 1 applies the full defense effect. Default is 0.5. |
 | `league_nicknames`, `league_order` | Tab names and order for the owner's leagues. |
 | `ignore_leagues` | League IDs to skip. |
+| `ntfy_topic` | ntfy topic that gets a notification when someone new opens a live page. Empty turns it off. |
 | `batch_users` | Sleeper usernames built by `batchbenchpress.py` and the scheduled job. |
 
 ## Repository layout
