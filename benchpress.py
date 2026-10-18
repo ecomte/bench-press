@@ -124,7 +124,8 @@ def main():
     user_id = me["user_id"]
     state = S.nfl_state() or {}
     season = str(cfg.get("season") or state.get("league_season") or state.get("season"))
-    sched = A.Schedule(S.schedule(season))
+    sched_raw = S.schedule(season)
+    sched = A.Schedule(sched_raw)
     week = args.week or sched.target_week()
     print("Season %s, setting lineups for week %d" % (season, week))
 
@@ -141,10 +142,17 @@ def main():
     proj = {r["player_id"]: r for r in proj_list if r.get("player_id")}
     print("Projections: %d players for week %d" % (len(proj), week))
     today = dt.date.today()
+    try:
+        from zoneinfo import ZoneInfo
+        now_et = now.astimezone(ZoneInfo("America/New_York"))
+    except Exception:
+        now_et = now
     started = [t for t in sched.by_week.get(week, {}) if A.game_state(sched.game(week, t), today) != "pre"]
     live_stats = {}
+    live_list = []
     if started:
-        for r in S.week_stats(season, week, final=False, max_age_hours=0.1):
+        live_list = S.week_stats(season, week, final=False, max_age_hours=0.1)
+        for r in live_list:
             if r.get("player_id"):
                 live_stats[r["player_id"]] = r.get("stats") or {}
         print("Week %d games already started for %d teams; pulled their points" % (week, len(started)))
@@ -251,6 +259,7 @@ def main():
                 "last3": round(sum(pts[-3:]) / len(pts[-3:]), 1) if pts else None,
                 "reserve": pid in reserve, "taxi": pid in taxi,
                 "locked": locked, "game_state": gstate, "actual": actual,
+                "left": A.game_left(game, gstate, now_et),
             }
 
         pool = {pid: info(pid) for pid in all_pids}
@@ -284,8 +293,8 @@ def main():
 
         # ---- alerts -------------------------------------------------------------------
         alerts = []
-        def pts(p, key):  # points that count: actual once the game has started, else projection
-            return p["actual"] if p["locked"] and p["actual"] is not None else p[key]
+        def pts(p, key):  # projected final: real points so far plus the projection for what's left of the game
+            return (p["actual"] or 0) + p[key] * p["left"] if p["locked"] else p[key]
 
         for i, s in enumerate(slots):
             c = P(cur[i])
@@ -349,12 +358,19 @@ def main():
                 oro = roster_ids.get(o["roster_id"], {})
                 ou = users.get(oro.get("owner_id"), {})
                 o_proj = 0.0
+                o_live = 0.0  # real points so far from their starters whose games have started
+                o_started = False
                 for pid in o.get("starters") or []:
                     if pid and pid != "0":
                         opl = players.get(pid) or {}
                         oteam = pid if pid.isalpha() else opl.get("team")
-                        if A.game_state(sched.game(week, oteam), today) in ("live", "final"):
-                            o_proj += A.score(live_stats.get(pid, {}), ss)
+                        ogame = sched.game(week, oteam)
+                        ostate = A.game_state(ogame, today)
+                        if ostate in ("live", "final"):
+                            o_now = A.score(live_stats.get(pid, {}), ss)
+                            o_proj += o_now + A.score((proj.get(pid) or {}).get("stats"), ss) * A.game_left(ogame, ostate, now_et)
+                            o_live += o_now
+                            o_started = True
                         else:
                             o_proj += A.score((proj.get(pid) or {}).get("stats"), ss)
                 ost = oro.get("settings") or {}
@@ -362,6 +378,7 @@ def main():
                     "team": (ou.get("metadata") or {}).get("team_name") or ou.get("display_name") or "Opponent",
                     "owner": ou.get("display_name", ""),
                     "proj": round(o_proj, 1),
+                    "live": round(o_live, 1), "started": o_started,
                     "record": "%d-%d" % (ost.get("wins", 0), ost.get("losses", 0)),
                 }
         st = mine.get("settings") or {}
@@ -376,6 +393,8 @@ def main():
             "proj_rec_sleeper": round(sum(pts(P(x), "sleeper") for x in rec if x), 1),
             "proj_cur": round(sum(pts(P(x), "sleeper") for x in cur if x and x != "0"), 1),
             "any_locked": any(P(x)["locked"] for x in cur if x and x != "0"),
+            # real points so far; locked starters are the same in every lineup view
+            "live_pts": round(sum(P(x)["actual"] or 0 for x in cur if x and x != "0" and P(x)["locked"]), 1),
             "scoring": {k: ss.get(k) for k in ("rec", "pass_td", "bonus_rec_te", "pass_int", "fum_lost")},
         })
 
@@ -525,6 +544,8 @@ def main():
         "user_sheets": "sheets/%s/" % tag,
         "season": season, "week": week, "byes": byes_now, "matchup_weight": W,
         "stats_weeks": sorted(weekly), "leagues": out_leagues,
+        "username": tag,
+        "built_at": now.timestamp(),
     }
     import render
     os.makedirs(REPORTS, exist_ok=True)
@@ -544,11 +565,15 @@ def main():
     with open(hpath, "w") as f:
         f.write(render.page_html(payload))
     if args.site:
-        # hosted copy: same page, photos come straight from sleepercdn.com
+        # hosted copy: same page, photos come straight from sleepercdn.com, plus the Refresh button
         site_dir = os.path.join(os.path.abspath(args.site), tag)
         os.makedirs(site_dir, exist_ok=True)
         with open(os.path.join(site_dir, "index.html"), "w") as f:
-            f.write(render.page_html(payload))
+            f.write(render.page_html(payload, live=True))
+        import sitedata
+        scoring_keys = set(k for lg in leagues for k, v in (lg.get("scoring_settings") or {}).items() if v)
+        sitedata.write(args.site, cfg, season, week, W, players, sched_raw, proj_list, live_list,
+                       sorted(weekly), dvp, logs, inj, scoring_keys)
         print("Site:    %s" % os.path.join(site_dir, "index.html"))
     else:
         print("Player photos for the phone page...")

@@ -86,11 +86,127 @@ def report_md(d, dvp):
     return "\n".join(L)
 
 
-def page_html(d):
+def page_html(d, live=False):
+    """live=True: the hosted copy, which loads ../benchpress.js and gets a Refresh button."""
     with open(os.path.join(ROOT, "config", "lineups_template.html")) as f:
         tpl = f.read()
     blob = json.dumps(d).replace("</", "<\\/")
+    if live:
+        tpl = tpl.replace("<!--__LIVE__-->", '<script src="../benchpress.js"></script>')
+        # hosted pages live at <site>/<user>/ and <site>/live/, so ../ is the landing page
+        tpl = tpl.replace("<h1>Bench <span>Press</span></h1>", '<h1><a href="../" title="Back to search">Bench <span>Press</span></a></h1>')
     return tpl.replace("/*__DATA__*/null", blob)
+
+
+def landing_html(users):
+    """The hosted site's front page: same look as the lineup pages, with a Sleeper username
+    search. A name with a built page links to it; any other name gets a live/?u= link."""
+    import html as H
+    import re
+    with open(os.path.join(ROOT, "config", "lineups_template.html")) as f:
+        tpl = f.read()
+    head = re.search(r"<head>(.*?)</head>", tpl, re.S).group(1)
+    tip = re.search(r'<section class="tip">.*?</section>', tpl, re.S).group(0)  # same Venmo block as the lineup pages
+    people = json.dumps([{"tag": u.lstrip("@").lower(), "name": u.lstrip("@")} for u in users]).replace("</", "<\\/")
+    return """<!doctype html>
+<html lang="en">
+<head>%s
+<style>
+.find{display:flex;gap:8px;flex-wrap:wrap}
+.find input{flex:1 1 200px;min-width:0;background:var(--panel);color:var(--ink);border:1px solid var(--line);border-radius:999px;padding:10px 16px;font:500 15px var(--body)}
+.find input:focus{outline:2px solid var(--accent);outline-offset:1px}
+.btn,.find button{display:inline-block;background:var(--accent);color:var(--accent-ink);border:0;border-radius:999px;padding:10px 20px;font:700 15px var(--body);cursor:pointer;text-decoration:none}
+.btn:hover,.find button:hover{filter:brightness(1.08)}
+.result{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px 18px}
+.result p{margin:0 0 6px}
+.result .who{display:flex;gap:14px;align-items:center;margin-bottom:12px}
+.result .av{width:52px;height:52px;border-radius:50%%;flex:none;background:var(--row2);border:2px solid var(--accent);object-fit:cover;display:grid;place-items:center;font:800 24px var(--display);color:var(--accent);text-transform:uppercase}
+.result .name{font:800 28px/1 var(--display);text-transform:uppercase;letter-spacing:.01em}
+.result .name span{color:var(--accent)}
+.result .count{font:500 12px var(--mono);color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-top:4px}
+.result .leagues{display:flex;gap:6px;flex-wrap:wrap;margin:0 0 14px}
+.result .msg{color:var(--muted)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="eyebrow">Sleeper lineup helper</div>
+    <h1><a href="./" title="Bench Press home">Bench <span>Press</span></a></h1>
+    <p class="tag">Let's eat a W.</p>
+    <p class="sub">Search your Sleeper username to open your lineups.</p>
+  </header>
+  <form class="find" id="find" role="search">
+    <input id="q" name="u" placeholder="Sleeper username" aria-label="Sleeper username" required autocapitalize="off" autocorrect="off" spellcheck="false" autocomplete="username">
+    <button type="submit">Search</button>
+  </form>
+  <div class="result" id="result" hidden aria-live="polite"></div>
+  %s
+  <footer>Read-only: Sleeper's API can't change lineups, so make swaps in the app and refresh Bench Press to view updated lineups.</footer>
+</div>
+<script>
+const PEOPLE = %s;
+const esc = (s) => String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const getJSON = async (url) => { const r = await fetch(url); return r.ok ? r.json() : null; };
+let STATIC;  // season and ignored leagues, from the site's own data
+async function season() {
+  if (STATIC === undefined) STATIC = await getJSON("data/static.json").catch(() => null);
+  if (STATIC && STATIC.season) return String(STATIC.season);
+  const st = await getJSON("https://api.sleeper.app/v1/state/nfl");
+  return String(st.league_season || st.season);
+}
+function card(user, leagues, href, label) {
+  const name = (user && (user.display_name || user.username)) || label;
+  const av = user && user.avatar
+    ? '<img class="av" alt="" src="https://sleepercdn.com/avatars/thumbs/' + encodeURIComponent(user.avatar) + '">'
+    : '<div class="av" aria-hidden="true">' + esc(name.slice(0, 1)) + '</div>';
+  let count = "", chips = "";
+  if (leagues) {
+    count = leagues.length + " current Sleeper league" + (leagues.length === 1 ? "" : "s");
+    chips = '<div class="leagues">' + leagues.map(l => '<span class="chip">' + esc(l.name) + '</span>').join("") + '</div>';
+  }
+  return '<div class="who">' + av + '<div><div class="name">Found <span>' + esc(name) + '</span></div>'
+    + (count ? '<div class="count">' + esc(count) + '</div>' : '') + '</div></div>' + chips
+    + '<a class="btn" href="' + href + '">' + "Open " + esc(name) + ' &rarr;</a>';
+}
+document.getElementById("find").onsubmit = async (e) => {
+  e.preventDefault();
+  const q = document.getElementById("q").value.trim().replace(/^@/, "");
+  if (!q) return;
+  const box = document.getElementById("result");
+  box.hidden = false;
+  const hit = PEOPLE.find(p => p.tag === q.toLowerCase());
+  box.innerHTML = '<p class="msg">Checking Sleeper for ' + esc(q) + '...</p>';
+  // Look the account up first, so a name that isn't on Sleeper never gets a page.
+  let user, leagues;
+  try {
+    user = await getJSON("https://api.sleeper.app/v1/user/" + encodeURIComponent(q));
+    if (user && user.user_id) {
+      const yr = await season();  // also loads STATIC
+      const ignore = new Set(((STATIC || {}).ignore_leagues || []).map(String));
+      const all = await getJSON("https://api.sleeper.app/v1/user/" + user.user_id + "/leagues/nfl/" + yr);
+      if (Array.isArray(all)) leagues = all.filter(l => !ignore.has(String(l.league_id)));
+    }
+  } catch (err) {
+    user = undefined;  // couldn't reach Sleeper; the pages still work, and the live page checks again
+  }
+  if (user === null || (user && !user.user_id)) {
+    box.innerHTML = '<p>No Sleeper account named ' + esc(q) + '. Check the spelling; it&rsquo;s your Sleeper username, not your display name.</p>';
+    return;
+  }
+  if (hit) { box.innerHTML = card(user, leagues, encodeURIComponent(hit.tag) + "/", hit.name); return; }
+  box.innerHTML = card(user, leagues, "live/?u=" + encodeURIComponent(q), q)
+    + '<p class="msg" style="margin-top:10px">No saved page yet, so this one builds live from Sleeper.</p>';
+};
+</script>
+</body>
+</html>
+""" % (head, tip, people)
+
+
+def live_page_html():
+    """The hosted live/ page: no build data, just the Refresh logic. It loads whoever is named in ?u=."""
+    return page_html({"placeholder": True, "leagues": [], "username": None, "matchup_weight": 0.5}, live=True)
 
 
 def artifact_html(d, photos=None):
