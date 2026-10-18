@@ -15,7 +15,8 @@
 
   const V1 = "https://api.sleeper.app/v1";
   const APP = "https://api.sleeper.com";
-  const POSITIONS = ["QB", "RB", "WR", "TE", "K", "DEF"];
+  const IDP_POS = ["DL", "LB", "DB"];
+  const POSITIONS = ["QB", "RB", "WR", "TE", "K", "DEF"].concat(IDP_POS);
   const ALL_POS = POSITIONS;
 
   const SLOT_ELIG = {
@@ -24,8 +25,10 @@
     WRRB_FLEX: ["RB", "WR"],
     REC_FLEX: ["WR", "TE"],
     SUPER_FLEX: ["QB", "RB", "WR", "TE"],
+    DL: ["DL"], LB: ["LB"], DB: ["DB"],
+    IDP_FLEX: ["DL", "LB", "DB"],
   };
-  const SLOT_LABEL = { SUPER_FLEX: "SF", WRRB_FLEX: "W/R", REC_FLEX: "W/T", FLEX: "FLEX" };
+  const SLOT_LABEL = { SUPER_FLEX: "SF", WRRB_FLEX: "W/R", REC_FLEX: "W/T", FLEX: "FLEX", IDP_FLEX: "IDP" };
   const OUT_STATUSES = new Set(["Out", "IR", "PUP", "Sus", "NA", "COV", "DNR"]);
   const HURT = new Set(["Out", "IR", "Doubtful", "PUP", "Sus"]);
 
@@ -62,6 +65,12 @@
     return pl.position || null;
   }
 
+  // player_fpos() in analysis.py: some defenders can fill two IDP spots (DL and LB)
+  function playerFpos(pl, pos) {
+    if (!IDP_POS.includes(pos)) return [pos];
+    return [pos].concat(((pl || {}).fantasy_positions || []).filter(p => IDP_POS.includes(p) && p !== pos));
+  }
+
   function playerName(pid, pl) {
     if (!pl) return pid;
     return ((pl.first_name || "") + " " + (pl.last_name || "")).trim() || pid;
@@ -75,8 +84,8 @@
   function matchupText(pos, row) {
     if (!row) return "";
     const r = row.rank, of = row.of;
-    if (pos === "DEF") {
-      return r <= of / 2 ? ordinal(r) + "-toughest offense for DEFs" : ordinal(of - r + 1) + "-friendliest offense for DEFs";
+    if (pos === "DEF" || IDP_POS.includes(pos)) {
+      return r <= of / 2 ? ordinal(r) + "-toughest offense for " + pos + "s" : ordinal(of - r + 1) + "-friendliest offense for " + pos + "s";
     }
     return r <= of / 2 ? ordinal(r) + "-toughest vs " + pos : ordinal(of - r + 1) + "-easiest vs " + pos;
   }
@@ -190,7 +199,7 @@
       if (!elig || result[i]) continue;
       let best = null, bestVal = null;
       for (const [pid, p] of pool) {
-        if (used.has(pid) || !elig.includes(p.pos) || !p.available) continue;
+        if (used.has(pid) || !(p.fpos || [p.pos]).some(x => elig.includes(x)) || !p.available) continue;
         if (best === null || p[key] > bestVal) { best = pid; bestVal = p[key]; }
       }
       if (best !== null) { used.add(best); result[i] = best; }
@@ -341,7 +350,12 @@
         const gstate = gameState(game, today);
         const locked = gstate === "live" || gstate === "final";
         const actual = (locked && pid in liveStats) ? score(liveStats[pid], ss) : (locked ? 0 : null);
-        const sleeperPts = score((pr || {}).stats, ss);
+        let sleeperPts = score((pr || {}).stats, ss);
+        if (IDP_POS.includes(pos) && !sleeperPts) {
+          // no Sleeper projection for this defender: use his season average in this league's scoring
+          const past = (logs[pid] || []).map(s => score(s, ss));
+          sleeperPts = past.length ? past.reduce((a, b) => a + b, 0) / past.length : 0;
+        }
         const opp = game ? game.opp : null;
         const row = opp ? ((dvp[pos] || {})[opp] || null) : null;
         const mult = row ? row.mult : 1.0;
@@ -366,7 +380,7 @@
         return {
           id: pid,
           name: pos !== "DEF" ? playerName(pid, players[pid]) : ((pl.first_name || pid) + " " + (pl.last_name || "")).trim(),
-          pos, team, status,
+          pos, fpos: playerFpos(pl, pos), team, status,
           opp, home: game ? game.home : null, day: game ? dayLabel(game.date) : "",
           date: game ? game.date : null,
           sleeper: r2(sleeperPts * factor), adj: r2(adj * factor),

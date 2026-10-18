@@ -4,17 +4,29 @@ import datetime as dt
 from collections import defaultdict
 
 OFF_POS = ["QB", "RB", "WR", "TE", "K"]
-ALL_POS = OFF_POS + ["DEF"]
+IDP_POS = ["DL", "LB", "DB"]  # individual defensive players, by Sleeper's fantasy position
+ALL_POS = OFF_POS + ["DEF"] + IDP_POS
 
-# Who can play where. Slots not listed here (IDP etc.) are left as you set them.
+# Who can play where. Slots not listed here (IR, taxi) are left as you set them.
 SLOT_ELIG = {
     "QB": {"QB"}, "RB": {"RB"}, "WR": {"WR"}, "TE": {"TE"}, "K": {"K"}, "DEF": {"DEF"},
     "FLEX": {"RB", "WR", "TE"},
     "WRRB_FLEX": {"RB", "WR"},
     "REC_FLEX": {"WR", "TE"},
     "SUPER_FLEX": {"QB", "RB", "WR", "TE"},
+    "DL": {"DL"}, "LB": {"LB"}, "DB": {"DB"},
+    "IDP_FLEX": {"DL", "LB", "DB"},
 }
-SLOT_LABEL = {"SUPER_FLEX": "SF", "WRRB_FLEX": "W/R", "REC_FLEX": "W/T", "FLEX": "FLEX"}
+SLOT_LABEL = {"SUPER_FLEX": "SF", "WRRB_FLEX": "W/R", "REC_FLEX": "W/T", "FLEX": "FLEX", "IDP_FLEX": "IDP"}
+
+# A typical IDP scoring, for the shared IDP sheet and the IDP defense-vs-position ranks only
+# (Sleeper's own pts_* totals leave defensive stats out). Lineups always use each league's
+# own IDP settings.
+IDP_SCORING = {
+    "idp_tkl_solo": 1.0, "idp_tkl_ast": 0.5, "idp_tkl_loss": 1.0, "idp_sack": 4.0, "idp_qb_hit": 1.0,
+    "idp_int": 3.0, "idp_ff": 3.0, "idp_fum_rec": 3.0, "idp_pass_def": 1.0, "idp_def_td": 6.0,
+    "idp_safe": 2.0, "idp_blk_kick": 2.0,
+}
 
 OUT_STATUSES = {"Out", "IR", "PUP", "Sus", "NA", "COV", "DNR"}
 DEF_POSITIONS = {"DE", "DT", "DL", "LB", "ILB", "OLB", "MLB", "CB", "S", "SS", "FS", "DB", "NT"}
@@ -40,7 +52,8 @@ def score(stats, scoring):
 
 def played(rec):
     s = rec.get("stats") or {}
-    return num(s.get("gp")) > 0 or num(s.get("off_snp")) > 0 or rec.get("player_id", "").isalpha()
+    return (num(s.get("gp")) > 0 or num(s.get("off_snp")) > 0 or num(s.get("def_snp")) > 0
+            or rec.get("player_id", "").isalpha())
 
 
 def player_pos(pl):
@@ -53,6 +66,22 @@ def player_pos(pl):
         if p in ALL_POS:
             return p
     return pos
+
+
+def player_fpos(pl, pos):
+    """Positions a player can fill. Sleeper lets some defenders play two IDP spots
+    (an edge rusher listed DL and LB); everyone else plays only his own position."""
+    if pos not in IDP_POS:
+        return [pos]
+    return [pos] + [p for p in (pl or {}).get("fantasy_positions") or [] if p in IDP_POS and p != pos]
+
+
+def week_pts(stats, pos):
+    """Points for one game in the shared sheets: half PPR, or default IDP scoring for defenders."""
+    s = stats or {}
+    if pos in IDP_POS:
+        return score(s, IDP_SCORING)
+    return num(s.get("pts_half_ppr"))
 
 
 def player_name(pid, pl):
@@ -167,7 +196,7 @@ def defense_vs_position(weekly, last_n=4, shrink_games=4):
     and a matchup multiplier (1.10 = gives up 10% more than average)."""
     weeks = sorted(weekly)
     recent = set(weeks[-last_n:])
-    allowed = {p: defaultdict(lambda: defaultdict(float)) for p in OFF_POS}  # pos -> def -> week -> pts
+    allowed = {p: defaultdict(lambda: defaultdict(float)) for p in OFF_POS + IDP_POS}  # pos -> def -> week -> pts
     def_pts_vs_offense = defaultdict(dict)  # offense team -> week -> DEF pts scored against them
     def_detail = defaultdict(lambda: defaultdict(float))  # def team -> stat -> total
     def_games = defaultdict(int)
@@ -180,6 +209,9 @@ def defense_vs_position(weekly, last_n=4, shrink_games=4):
                 continue
             if pos in OFF_POS and played(rec):
                 allowed[pos][opp][w] += num(s.get("pts_half_ppr"))
+            elif pos in IDP_POS and played(rec):
+                # keyed by the OFFENSE the defender faced: how much it gives up to DLs, LBs, DBs
+                allowed[pos][opp][w] += week_pts(s, pos)
             elif pos == "DEF":
                 def_pts_vs_offense[opp][w] = num(s.get("pts_half_ppr", s.get("pts_std")))
                 team = rec.get("team") or rec.get("player_id")
@@ -188,7 +220,7 @@ def defense_vs_position(weekly, last_n=4, shrink_games=4):
                     def_detail[team][k] += num(s.get(k))
 
     out = {}
-    for pos in OFF_POS:
+    for pos in OFF_POS + IDP_POS:
         # every team that played gets a row, even if it allowed 0
         teams = set(allowed[pos])
         rows = {}
@@ -247,10 +279,10 @@ def matchup_text(pos, row):
     if not row:
         return ""
     r, of = row["rank"], row["of"]
-    if pos == "DEF":
+    if pos == "DEF" or pos in IDP_POS:
         if r <= of / 2:
-            return "%s-toughest offense for DEFs" % ordinal(r)
-        return "%s-friendliest offense for DEFs" % ordinal(of - r + 1)
+            return "%s-toughest offense for %ss" % (ordinal(r), pos)
+        return "%s-friendliest offense for %ss" % (ordinal(of - r + 1), pos)
     if r <= of / 2:
         return "%s-toughest vs %s" % (ordinal(r), pos)
     return "%s-easiest vs %s" % (ordinal(of - r + 1), pos)
@@ -288,6 +320,11 @@ SHEET_STATS = [
     ("fum_lost", "fum_lost"),
 ]
 K_STATS = [("fgm", "fgm"), ("fga", "fga"), ("fgm_lng", "fg_long"), ("xpm", "xpm"), ("xpa", "xpa")]
+IDP_STATS = [
+    ("idp_tkl", "tackles"), ("idp_tkl_solo", "solo"), ("idp_tkl_ast", "assists"), ("idp_tkl_loss", "tfl"),
+    ("idp_sack", "sacks"), ("idp_qb_hit", "qb_hits"), ("idp_int", "ints"), ("idp_pass_def", "pass_def"),
+    ("idp_ff", "forced_fum"), ("idp_fum_rec", "fum_rec"), ("idp_def_td", "def_td"),
+]
 
 
 def build_player_logs(weekly, dvp):
@@ -308,7 +345,7 @@ def build_player_logs(weekly, dvp):
                 row = dvp.get(pos, {}).get(opp)
             logs[pid].append({
                 "week": w, "team": rec.get("team"), "opp": opp,
-                "pts_half": num(s.get("pts_half_ppr")), "pts_ppr": num(s.get("pts_ppr")),
+                "pts_half": week_pts(s, pos), "pts_ppr": week_pts(s, pos) if pos in IDP_POS else num(s.get("pts_ppr")),
                 "stats": s, "opp_rank": row["rank"] if row else None, "opp_of": row["of"] if row else None,
             })
             meta[pid] = rec.get("player") or {}
@@ -319,13 +356,14 @@ def summarize_player(log, pos):
     g = len(log)
     tot = defaultdict(float)
     snaps = []
+    side = "def" if pos in IDP_POS else "off"
     for e in log:
         for k, v in e["stats"].items():
             if isinstance(v, (int, float)):
                 tot[k] += v
         s = e["stats"]
-        if num(s.get("tm_off_snp")) > 0:
-            snaps.append(num(s.get("off_snp")) / num(s.get("tm_off_snp")))
+        if num(s.get("tm_%s_snp" % side)) > 0:
+            snaps.append(num(s.get("%s_snp" % side)) / num(s.get("tm_%s_snp" % side)))
     half = [e["pts_half"] for e in log]
     last3 = half[-3:]
     tough = [e["pts_half"] for e in log if e["opp_rank"] and e["opp_rank"] <= 10]
@@ -342,12 +380,14 @@ def summarize_player(log, pos):
         "avg_vs_other_def": round(sum(easy) / len(easy), 2) if easy else "",
         "snap_pct": round(100 * sum(snaps) / len(snaps), 1) if snaps else "",
     }
-    stats = K_STATS if pos == "K" else SHEET_STATS
+    stats = K_STATS if pos == "K" else IDP_STATS if pos in IDP_POS else SHEET_STATS
     for key, col in stats:
         if key == "fgm_lng":
             out[col] = int(max([num(e["stats"].get(key)) for e in log] or [0]))
         else:
             out[col] = round(tot.get(key, 0), 1)
+    if pos in IDP_POS and not out["tackles"]:  # older stat lines only split solo and assisted
+        out["tackles"] = round(tot.get("idp_tkl_solo", 0) + tot.get("idp_tkl_ast", 0), 1)
     if pos in ("WR", "TE", "RB") and g:
         out["tgt_pg"] = round(tot.get("rec_tgt", 0) / g, 1)
     return out
@@ -371,7 +411,7 @@ def fill_lineup(slots, pool, key, preset=None, exclude=()):
             continue
         best = None
         for pid, p in pool.items():
-            if pid in used or p["pos"] not in elig or not p["available"]:
+            if pid in used or not elig.intersection(p.get("fpos") or [p["pos"]]) or not p["available"]:
                 continue
             if best is None or p[key] > pool[best][key]:
                 best = pid

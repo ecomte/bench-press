@@ -95,7 +95,9 @@ def version_html():
             m = re.search(r"img\.shields\.io/badge/release-v([0-9][^-)]*)", f.read())
     except OSError:
         m = None
-    ver = "Bench Press Version: %s<br>" % m.group(1) if m else ""
+    # tags are the bare number (1.0.1), so the release page is releases/tag/<version>
+    ver = ('Bench Press Version: %s. Changelog: <a href="https://github.com/ecomte/bench-press/releases/tag/%s" '
+           'target="_blank" rel="noopener">GitHub</a><br>' % (m.group(1), m.group(1))) if m else ""
     return ver + "Copyright &copy; 2026 E Comte"
 
 
@@ -126,6 +128,7 @@ def landing_html(users):
 <html lang="en">
 <head>%s
 <style>
+.pitch{color:var(--ink);margin:0 0 10px;font-size:15px;max-width:620px}
 .find{display:flex;gap:8px;flex-wrap:wrap}
 .find input{flex:1 1 200px;min-width:0;background:var(--panel);color:var(--ink);border:1px solid var(--line);border-radius:999px;padding:10px 16px;font:500 15px var(--body)}
 .find input:focus{outline:2px solid var(--accent);outline-offset:1px}
@@ -148,6 +151,7 @@ def landing_html(users):
     <div class="eyebrow">Sleeper lineup helper</div>
     <h1><a href="./" title="Bench Press home">Bench <span>Press</span></a></h1>
     <p class="tag">Let's eat a W.</p>
+    <p class="pitch">In a pile of Sleeper leagues? Tired of spending hours fixing every lineup? Bench Press checks each of your teams and flags the swaps that matter, based on recent performance, injuries and how tough each opposing defense is.</p>
     <p class="sub">Search your Sleeper username to open your lineups.</p>
   </header>
   <form class="find" id="find" role="search">

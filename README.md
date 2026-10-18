@@ -55,7 +55,7 @@ The first run takes about 20 seconds, because it downloads Sleeper's 5 MB player
 |---|---|
 | `lineups/lineups-<username>.html` | The tabbed lineup page, which opens offline. Toggle between **Recommended**, **Sleeper proj only** and **Current in Sleeper**. |
 | `reports/<season>_weekNN.md` | The same information as text, including alerts, lineup tables, injury context, and the toughest and easiest defenses by position. |
-| `sheets/*.csv` | Position sheets (QB, RB, WR, TE, K, DEF) and `DEF_vs_POS.csv`, shared by everyone who was run. |
+| `sheets/*.csv` | Position sheets (QB, RB, WR, TE, K, DEF, and IDP for every DL, LB and DB) and `DEF_vs_POS.csv`, shared by everyone who was run. IDP points in the sheets use a typical IDP scoring (`IDP_SCORING` in `analysis.py`); lineups always use each league's own. |
 | `sheets/<username>/` | That person's `lineups.csv` and `game_log.csv`. |
 | `data/` | API cache, roster snapshots and headshots. It's safe to delete and rebuilds itself. |
 
@@ -66,7 +66,7 @@ The first run takes about 20 seconds, because it downloads Sleeper's 5 MB player
 1. **Projection.** Sleeper's weekly projection, re-scored with each league's scoring (half or full PPR, 6-point passing TDs, TE premium).
 2. **Matchup adjustment.** Each defense's points allowed to the position, compared with the league average and shrunk toward average for small samples. The projection moves 50% of the way toward that, set by `matchup_weight` in `config/config.json`, because Sleeper already accounts for matchups somewhat.
 3. **Availability.** Players on BYE or listed Out, IR, PUP or suspended are excluded. Doubtful players count at 25%, and Questionable players count in full but get flagged.
-4. **Filling slots.** Fixed positions are filled first, then FLEX, then Superflex, each with the best available player. IR, taxi and IDP slots are left alone.
+4. **Filling slots.** Fixed positions are filled first, then FLEX, then Superflex, each with the best available player. IDP slots (DL, LB, DB and IDP flex) are filled the same way; a defender Sleeper lists at two spots (DL and LB) can fill either. A defender with no Sleeper projection uses his season average in that league's scoring, and his matchup is how many IDP points the offense he faces gives up to his position. IR and taxi slots are left alone.
 5. **Locked games.** Once a player's game kicks off, he stays where he is, and the page shows his real points (LIVE or FINAL).
 
 Alerts on the page are **Fix** (empty slot or an unavailable starter), **Swap** (the recommended changes), **Watch** (Questionable starters, or a starter whose QB is out), **Your call** (Sleeper's projections and the matchup data disagree) and **Note** (tough matchups, early games, open IR spots, roster changes).
