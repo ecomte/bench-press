@@ -76,9 +76,8 @@ def main():
 
 
 def write_site_index(site, users):
-    """Landing page for the hosted site: one link per person who built successfully, a box
-    for any other Sleeper username (opens live/?u=<name>), and the shared refresh script."""
-    import html
+    """Landing page for the hosted site (a username search that links to the pages that built),
+    the live/?u=<name> page for anyone else, and the shared refresh script."""
     import shutil
     sys.path.insert(0, os.path.join(HERE, "python-subscripts"))
     import render
@@ -86,35 +85,7 @@ def write_site_index(site, users):
     with open(os.path.join(site, "live", "index.html"), "w") as f:
         f.write(render.live_page_html())
     shutil.copy(os.path.join(HERE, "web", "benchpress.js"), os.path.join(site, "benchpress.js"))
-    links = "\n".join('    <li><a href="%s/">%s</a></li>' % (html.escape(u.lstrip("@").lower()), html.escape(u))
-                      for u in users)
-    page = """<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Bench Press</title>
-  <style>
-    :root { color-scheme: light dark; }
-    body { font: 16px/1.5 -apple-system, system-ui, sans-serif; max-width: 480px; margin: 40px auto; padding: 0 16px; }
-    li { margin: 8px 0; }
-    input, button { font: inherit; padding: 6px 10px; }
-  </style>
-</head>
-<body>
-  <h1>Bench Press</h1>
-  <p>Let's eat a W. Pick your page:</p>
-  <ul>
-%s
-  </ul>
-  <form action="live/" method="get">
-    <p>Or look up any Sleeper username:</p>
-    <input name="u" placeholder="Sleeper username" required autocapitalize="off" autocorrect="off">
-    <button type="submit">Go</button>
-  </form>
-</body>
-</html>
-""" % links
+    page = render.landing_html(users)
     os.makedirs(site, exist_ok=True)
     with open(os.path.join(site, "index.html"), "w") as f:
         f.write(page)

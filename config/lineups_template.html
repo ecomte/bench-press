@@ -110,6 +110,8 @@ h1 span{color:var(--accent)}
   .sample{background:rgba(242,163,58,.14);border:1px solid var(--accent);color:var(--ink);border-radius:10px;padding:10px 14px;font-size:14px}
 .sample code{font-family:var(--mono)}
 footer{font-size:12px;color:var(--dim);border-top:1px solid var(--line);padding-top:12px}
+.tip .tag{margin-bottom:6px}
+.tip a{color:var(--accent);font-weight:600}
 @media (max-width:520px){
   h1{font-size:42px}
   .prow{grid-template-columns:38px 34px minmax(0,1fr) auto;gap:9px;padding:10px 12px}
@@ -132,6 +134,10 @@ footer{font-size:12px;color:var(--dim);border-top:1px solid var(--line);padding-
   <nav class="tabs" id="tabs" role="tablist"></nav>
   <div class="sample" id="sample" hidden>Sample data: these are made-up test players, not your real rosters. Run <code>python3 benchpress.py</code> on your Mac and this fills in.</div>
   <main id="panel" style="display:flex;flex-direction:column;gap:16px"></main>
+  <section class="tip">
+    <p class="tag">Eating W's?</p>
+    <p class="sub">This page was built purely out of love and passion for the game. If you feel like showing appreciation, Venmo E at <a href="https://venmo.com/u/EComte" target="_blank" rel="noopener">@EComte</a>.</p>
+  </section>
   <footer id="foot"></footer>
 </div>
 <!--__LIVE__-->
@@ -227,7 +233,7 @@ function render() {
   $("#sample").hidden = !DATA.sample;
   $("#eyebrow").textContent = "Sleeper · " + (DATA.owner ? DATA.owner + " · " : "") + DATA.season + " · Week " + DATA.week;
   document.title = "Bench Press" + (DATA.owner ? " · " + DATA.owner : "");
-  $("#sub").textContent = "Built " + DATA.generated + " from Sleeper stats (weeks " + (DATA.stats_weeks.join(", ") || "none") + ") and this week's projections.";
+  $("#sub").textContent = "Built " + DATA.generated + " from Sleeper current season stats and this week's projections.";
   $("#byes").innerHTML = "Byes: " + (DATA.byes.length ? DATA.byes.map(t => '<span class="chip">' + esc(t) + '</span>').join("") : "none");
   $("#tabs").innerHTML = DATA.leagues.map(l => {
     const n = l.alerts.filter(a => a.level === "bad" || a.level === "change").length;

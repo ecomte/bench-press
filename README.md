@@ -2,6 +2,8 @@
 
 [![Release](https://img.shields.io/badge/release-v0.1.0-orange)](https://github.com/ecomte/bench-press/releases)
 
+**Open Bench Press: [ecomte.github.io/bench-press](https://ecomte.github.io/bench-press/)**. Search your Sleeper username to see your lineups.
+
 > Let's eat a W.
 
 Fantasy football lineup suggestions for Sleeper leagues. Bench Press pulls your rosters from the Sleeper API, re-scores Sleeper's projections with each league's rules, adjusts them for the opposing defense, and recommends a starting lineup for every team you own. It flags byes, injuries, empty slots and close calls, then renders a tabbed, Sleeper-style lineup page.
@@ -26,7 +28,7 @@ Sleeper API ──► GitHub Actions (scheduled) ──► benchpress.py for eac
 
 - **Hosting:** GitHub Pages, deployed from GitHub Actions. Each person gets `https://ecomte.github.io/bench-press/<username>/`, and each page keeps one tab per league.
 - **Refresh button:** each hosted page has a **Refresh** button that rebuilds the lineup on the phone from live Sleeper data (`web/benchpress.js`). The scheduled build publishes the slow-changing data it needs (player list, defense-vs-position ranks, game logs) to `data/` on the site, so a tap only fetches this week's rosters, projections and live points. If a browser can't reach Sleeper's app endpoints, it uses the build's copies in `data/`.
-- **Any username:** the landing page has a lookup box that opens `live/?u=<username>`, which builds that person's page on the spot.
+- **Landing page:** a Sleeper username search. A name with a built page links straight to it; any other name gets a link to `live/?u=<username>`, which builds that person's page on the spot.
 - **Schedule (US Eastern):** hourly every day, and every 15 minutes during games: Sunday from noon to midnight, plus Monday and Thursday nights. A build can also be started by hand from the Actions tab.
 - **Secrets:** none. Sleeper's API is public and read-only, and everything in this repo is already public on Sleeper.
 - **Users:** the people built on each run are listed in `batch_users` in `config/config.json`. Adding a friend is a one-line change.
