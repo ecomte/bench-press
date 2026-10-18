@@ -325,12 +325,14 @@ function setupRefresh() {
   };
   async function refresh() {
     if (!DATA.username) return;
+    last = Date.now();
     const label = btn.querySelector("span");
     btn.disabled = true; btn.classList.add("spin"); label.textContent = "Refreshing...";
     msg.className = "msg"; msg.textContent = "";
     try {
       const d = await BenchPress.build({ username: DATA.username, base: new URL("..", location.href).href, storage });
       DATA = d;
+      storage.setItem(lastKey, JSON.stringify(d));
       if (!DATA.leagues.some(l => l.id === tab)) tab = DATA.leagues[0] && DATA.leagues[0].id;
       render();
       msg.textContent = "Live from Sleeper";
@@ -342,7 +344,25 @@ function setupRefresh() {
     }
   }
   btn.onclick = refresh;
-  if (DATA.placeholder && DATA.username) refresh();
+  // Reloading the browser page brings back the saved build, which can be older than the
+  // last live refresh on this device. Show whichever is newer while the live pull runs.
+  const lastKey = "benchpress.last." + String(DATA.username || "").toLowerCase();
+  try {
+    const kept = JSON.parse(storage.getItem(lastKey) || "null");
+    if (kept && kept.built_at && kept.built_at > (DATA.built_at || 0) && (DATA.placeholder || kept.week >= DATA.week)) {
+      DATA = kept;
+      if (!DATA.leagues.some(l => l.id === tab)) tab = DATA.leagues[0] && DATA.leagues[0].id;
+      render();
+    }
+  } catch (e) { /* nothing kept, or storage blocked */ }
+  // The saved page can be up to an hour old (longer overnight), so new injuries and
+  // lineup issues would only show after a tap. Pull live data as soon as the page opens,
+  // and again when someone comes back to a tab left open for a while.
+  let last = Date.now();
+  refresh();
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible" && Date.now() - last > 10 * 60 * 1000 && !btn.disabled) refresh();
+  });
 }
 render();
 setupRefresh();
