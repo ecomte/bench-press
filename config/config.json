@@ -1,0 +1,25 @@
+{
+  "username": "EComte",
+  "user_id": "588851403624067072",
+  "matchup_weight": 0.5,
+  "league_nicknames": {
+    "1312920511637913600": "Nyarsh",
+    "1389723242784124928": "Game of Games 2",
+    "1326592273378480128": "Ohio Fantasy",
+    "1387603194053406720": "Clarmaine's Cribb"
+  },
+  "league_order": [
+    "1312920511637913600",
+    "1389723242784124928",
+    "1326592273378480128",
+    "1387603194053406720"
+  ],
+  "ignore_leagues": [],
+  "batch_users": [
+    "EComte",
+    "CalebJones23",
+    "ryaneorchard",
+    "JaredKieninger",
+    "dtr41n"
+  ]
+}

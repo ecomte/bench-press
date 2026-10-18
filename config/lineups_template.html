@@ -1,0 +1,252 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bench Press</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@600;800&family=Public+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#10151f; --panel:#18202f; --row:#1d2738; --row2:#222d40; --line:#2a3548;
+  --ink:#eef2f8; --muted:#8f9bb0; --dim:#5e6a80;
+  --accent:#f2a33a; --accent-ink:#1a1206;
+  --good:#3ccf8e; --bad:#ff5c6c; --warn:#f5c64a; --call:#b48cff; --info:#5fb3ff;
+  --qb:#fc2b6d; --rb:#20ceb8; --wr:#56c9f8; --te:#feae58; --k:#c96cff; --def:#bf755d;
+  --display:"Big Shoulders Display",Impact,"Arial Narrow",sans-serif;
+  --body:"Public Sans",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,Menlo,monospace;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 var(--body);-webkit-font-smoothing:antialiased}
+.wrap{max-width:760px;margin:0 auto;padding-block:28px 60px;padding-left:max(16px, env(safe-area-inset-left, 0px));padding-right:max(16px, env(safe-area-inset-right, 0px));display:flex;flex-direction:column;gap:18px}
+.eyebrow{font:500 12px var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--accent)}
+h1{font:800 54px/0.95 var(--display);margin:6px 0 4px;letter-spacing:.01em;text-transform:uppercase}
+h1 span{color:var(--accent)}
+.tag{font:600 20px/1.1 var(--display);letter-spacing:.04em;text-transform:uppercase;color:var(--accent);margin:0 0 8px}
+.sub{color:var(--muted);margin:0;font-size:14px}
+.byes{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px;align-items:center;font:12px var(--mono);color:var(--muted)}
+.chip{font:500 12px var(--mono);border:1px solid var(--line);border-radius:999px;padding:2px 8px;color:var(--ink)}
+.tabs{display:flex;gap:6px;flex-wrap:wrap;border-bottom:1px solid var(--line);padding-bottom:12px}
+.tab{position:relative;background:transparent;border:1px solid var(--line);color:var(--ink);border-radius:999px;padding:7px 15px;font:600 14px var(--body);cursor:pointer}
+.tab:hover{border-color:var(--muted)}
+.tab[aria-selected="true"]{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.tab .dot{position:absolute;top:-4px;right:-4px;min-width:18px;height:18px;border-radius:9px;background:var(--bad);color:#fff;font:700 11px/18px var(--body);text-align:center;padding:0 4px}
+.head{display:flex;flex-direction:column;gap:4px}
+.head h2{font:800 40px/1 var(--display);text-transform:uppercase;margin:0}
+.head .fmt{font:12px var(--mono);color:var(--muted)}
+.head .me{font-size:14px;color:var(--muted)}
+.board{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px 18px;gap:10px}
+.board .side .t{font-weight:600;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.board .side .r{font:12px var(--mono);color:var(--muted)}
+.board .side .n{font:800 36px/1 var(--display)}
+.board .side.right{text-align:right}
+.board .vs{font:600 12px var(--mono);color:var(--dim)}
+.board .note{grid-column:1/-1;font:12px var(--mono);color:var(--muted);border-top:1px solid var(--line);padding-top:8px}
+.seg{display:inline-flex;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:3px;gap:2px;align-self:flex-start;flex-wrap:wrap}
+.seg button{background:transparent;border:0;color:var(--muted);font:600 13px var(--body);padding:6px 12px;border-radius:8px;cursor:pointer}
+.seg button[aria-pressed="true"]{background:var(--row2);color:var(--ink)}
+.alerts{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
+.alerts li{background:var(--panel);border-left:3px solid var(--info);border-radius:6px;padding:8px 12px;font-size:14px}
+.alerts li.bad{border-color:var(--bad)} .alerts li.change{border-color:var(--accent)} .alerts li.warn{border-color:var(--warn)}
+.alerts li.call{border-color:var(--call)} .alerts li.info{border-color:var(--info)}
+.alerts .lv{font:700 10px var(--mono);letter-spacing:.06em;text-transform:uppercase;margin-right:8px}
+.alerts li.bad .lv{color:var(--bad)} .alerts li.change .lv{color:var(--accent)} .alerts li.warn .lv{color:var(--warn)}
+.alerts li.call .lv{color:var(--call)} .alerts li.info .lv{color:var(--info)}
+.sect{font:700 12px var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin:6px 0 -8px;display:flex;justify-content:space-between}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:14px;overflow:hidden}
+.prow{display:grid;grid-template-columns:46px 40px minmax(0,1fr) auto;gap:12px;align-items:center;padding:10px 14px;border-bottom:1px solid var(--line)}
+.prow:last-child{border-bottom:0}
+.prow.changed{background:linear-gradient(90deg,rgba(242,163,58,.13),transparent 60%);box-shadow:inset 3px 0 0 var(--accent)}
+.prow.off{opacity:.55}
+.slot{height:26px;border-radius:7px;font:800 13px/26px var(--body);text-align:center;color:#0d1220;background:#8796ad;letter-spacing:.02em}
+.slot.QB{background:var(--qb)} .slot.RB{background:var(--rb)} .slot.WR{background:var(--wr)} .slot.TE{background:var(--te)}
+.slot.K{background:var(--k)} .slot.DEF{background:var(--def)}
+.slot.FLEX{background:linear-gradient(135deg,var(--rb),var(--wr) 55%,var(--te))}
+.slot.SUPER_FLEX{background:linear-gradient(135deg,var(--qb),var(--wr) 60%,var(--te))}
+.slot.WRRB_FLEX{background:linear-gradient(135deg,var(--rb),var(--wr))}
+.slot.REC_FLEX{background:linear-gradient(135deg,var(--wr),var(--te))}
+.slot.BN{background:var(--row2);color:var(--muted)}
+.av{width:40px;height:40px;border-radius:50%;background:var(--row2);overflow:hidden;display:grid;place-items:center;font:700 13px var(--body);color:var(--muted);position:relative}
+.av img{width:100%;height:100%;object-fit:cover;position:absolute;inset:0}
+.who{min-width:0}
+.who .nm{font-weight:700;font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.who .ln{font:12px var(--mono);color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.who .ln b{color:var(--ink);font-weight:500}
+.who .nt{font-size:12px;color:var(--warn);margin-top:2px}
+.who .rp{font-size:12px;color:var(--accent);margin-top:2px}
+.inj{display:inline-block;font:700 10px/16px var(--body);padding:0 5px;border-radius:4px;margin-left:6px;vertical-align:2px;background:var(--bad);color:#fff}
+.inj.Q{background:var(--warn);color:#1a1405}
+.inj.BYE{background:var(--dim)}
+.pts{text-align:right;display:flex;flex-direction:column;align-items:flex-end;gap:3px}
+.pts .big{font:800 26px/1 var(--display)}
+.pts .sm{font:11px var(--mono);color:var(--muted)}
+.pts .big.act{color:var(--good)}
+.gs{font:700 9px/14px var(--mono);letter-spacing:.06em;padding:1px 4px;border-radius:3px;margin-right:6px;vertical-align:5px;background:var(--row2);color:var(--muted)}
+.gs.live{background:rgba(255,92,108,.18);color:var(--bad)}
+.mu{font:600 11px var(--mono);padding:1px 6px;border-radius:4px;background:var(--row2);color:var(--muted);white-space:nowrap}
+.mu.easy{background:rgba(60,207,142,.16);color:var(--good)}
+.mu.tough{background:rgba(255,92,108,.16);color:var(--bad)}
+.legend{font-size:12px;color:var(--muted);line-height:1.6}
+  .sample{background:rgba(242,163,58,.14);border:1px solid var(--accent);color:var(--ink);border-radius:10px;padding:10px 14px;font-size:14px}
+.sample code{font-family:var(--mono)}
+footer{font-size:12px;color:var(--dim);border-top:1px solid var(--line);padding-top:12px}
+@media (max-width:520px){
+  h1{font-size:42px}
+  .prow{grid-template-columns:38px 34px minmax(0,1fr) auto;gap:9px;padding:10px 12px}
+  .prow .av{width:34px;height:34px;font-size:12px}
+  .board .side .n{font-size:28px}
+  .who .nm,.who .ln{white-space:normal}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="eyebrow" id="eyebrow"></div>
+    <h1>Bench <span>Press</span></h1>
+    <p class="tag">Let's eat a W.</p>
+    <p class="sub" id="sub"></p>
+    <div class="byes" id="byes"></div>
+  </header>
+  <nav class="tabs" id="tabs" role="tablist"></nav>
+  <div class="sample" id="sample" hidden>Sample data: these are made-up test players, not your real rosters. Run <code>python3 benchpress.py</code> on your Mac and this fills in.</div>
+  <main id="panel" style="display:flex;flex-direction:column;gap:16px"></main>
+  <footer id="foot"></footer>
+</div>
+<script>
+const DATA = /*__DATA__*/null;
+const NO_IMG = /*__NOIMG__*/false;
+const PHOTOS = /*__PHOTOS__*/{};
+const $ = (s) => document.querySelector(s);
+const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const store = {
+  get(k, d) { try { const v = localStorage.getItem("benchpress." + k); return v == null ? d : v; } catch (e) { return d; } },
+  set(k, v) { try { localStorage.setItem("benchpress." + k, v); } catch (e) {} }
+};
+let tab = store.get("tab", DATA.leagues[0] && DATA.leagues[0].id);
+if (!DATA.leagues.some(l => l.id === tab)) tab = DATA.leagues[0] && DATA.leagues[0].id;
+let mode = store.get("mode", "rec");
+const MODES = [["rec", "Recommended"], ["sleeper", "Sleeper proj only"], ["cur", "Current in Sleeper"]];
+
+function initials(n) { return n.split(/\s+/).map(w => w[0]).join("").slice(0, 2).toUpperCase(); }
+function avatar(p) {
+  if (!p) return '<div class="av">–</div>';
+  if (PHOTOS[p.id]) return '<div class="av">' + esc(initials(p.name)) + '<img alt="" src="' + PHOTOS[p.id] + '" onerror="this.remove()"></div>';
+  if (NO_IMG) return '<div class="av">' + esc(initials(p.name)) + '</div>';
+  const src = p.pos === "DEF"
+    ? "https://sleepercdn.com/images/team_logos/nfl/" + String(p.team).toLowerCase() + ".png"
+    : "https://sleepercdn.com/content/nfl/players/thumb/" + p.id + ".jpg";
+  return '<div class="av">' + esc(initials(p.name)) + '<img alt="" loading="lazy" src="' + src + '" onerror="this.remove()"></div>';
+}
+function injTag(p) {
+  if (!p) return "";
+  if (p.why === "BYE") return '<span class="inj BYE">BYE</span>';
+  if (!p.status) return "";
+  const short = {Questionable: "Q", Doubtful: "D", Out: "OUT", IR: "IR", PUP: "PUP", Sus: "SUS"}[p.status] || p.status;
+  return '<span class="inj ' + (short === "Q" ? "Q" : "") + '">' + esc(short) + '</span>';
+}
+function muChip(p) {
+  if (!p || !p.rank) return "";
+  const q = p.rank / p.of;
+  const cls = q <= 0.25 ? "tough" : q > 0.75 ? "easy" : "";
+  return '<span class="mu ' + cls + '" title="Defense toughness rank ' + p.rank + ' of ' + p.of + ' (1 = toughest)">' + esc(p.matchup) + '</span>';
+}
+function row(slot, label, p, opts) {
+  opts = opts || {};
+  const cls = ["prow"];
+  if (opts.changed) cls.push("changed");
+  if (p && !p.available) cls.push("off");
+  if (!p) {
+    return '<div class="' + cls.join(" ") + '"><div class="slot ' + esc(slot) + '">' + esc(label) + '</div>' +
+      avatar(null) + '<div class="who"><div class="nm" style="color:var(--bad)">Empty</div></div><div></div></div>';
+  }
+  const game = p.opp ? ((p.home ? "vs " : "@ ") + p.opp + " " + p.day) : (p.team ? "BYE" : "Free agent");
+  const proj = mode === "rec" ? p.adj : p.sleeper;
+  const played = p.locked && p.actual != null;
+  // once a game starts, the big number is the real score and the projection moves underneath it
+  const val = played ? p.actual : proj;
+  const second = played ? "proj " + proj.toFixed(1)
+    : (mode === "rec" ? "Sleeper " + p.sleeper.toFixed(1) : (p.adj !== p.sleeper ? "Adj " + p.adj.toFixed(1) : ""));
+  const gameTag = p.game_state === "final" ? '<span class="gs final">FINAL</span>' : p.game_state === "live" ? '<span class="gs live">LIVE</span>' : "";
+  const avg = p.avg != null ? "avg " + p.avg + " · L3 " + p.last3 : "no games yet";
+  return '<div class="' + cls.join(" ") + '">' +
+    '<div class="slot ' + esc(slot) + '">' + esc(label) + '</div>' + avatar(p) +
+    '<div class="who"><div class="nm">' + esc(p.name) + injTag(p) + '</div>' +
+    '<div class="ln"><b>' + esc(p.pos) + ' · ' + esc(p.team || "FA") + '</b>  ' + esc(game) + '  ·  ' + esc(avg) + '</div>' +
+    (opts.replaces ? '<div class="rp">↑ in for ' + esc(opts.replaces) + '</div>' : "") +
+    (p.notes && p.notes.length ? '<div class="nt">' + p.notes.map(esc).join(" · ") + '</div>' : "") +
+    '</div>' +
+    '<div class="pts"><div class="big' + (played ? " act" : "") + '">' + gameTag + ((p.available || played) ? val.toFixed(1) : "—") + '</div>' +
+    (second ? '<div class="sm">' + esc(second) + '</div>' : "") + (played ? "" : muChip(p)) + '</div>' +
+    '</div>';
+}
+
+function render() {
+  $("#sample").hidden = !DATA.sample;
+  $("#eyebrow").textContent = "Sleeper · " + (DATA.owner ? DATA.owner + " · " : "") + DATA.season + " · Week " + DATA.week;
+  document.title = "Bench Press" + (DATA.owner ? " · " + DATA.owner : "");
+  $("#sub").textContent = "Built " + DATA.generated + " from Sleeper stats (weeks " + (DATA.stats_weeks.join(", ") || "none") + ") and this week's projections.";
+  $("#byes").innerHTML = "Byes: " + (DATA.byes.length ? DATA.byes.map(t => '<span class="chip">' + esc(t) + '</span>').join("") : "none");
+  $("#tabs").innerHTML = DATA.leagues.map(l => {
+    const n = l.alerts.filter(a => a.level === "bad" || a.level === "change").length;
+    return '<button class="tab" role="tab" data-id="' + esc(l.id) + '" aria-selected="' + (l.id === tab) + '">' + esc(l.short) +
+      (n ? '<span class="dot">' + n + '</span>' : "") + '</button>';
+  }).join("");
+  document.querySelectorAll(".tab").forEach(b => b.onclick = () => { tab = b.dataset.id; store.set("tab", tab); render(); });
+
+  const L = DATA.leagues.find(l => l.id === tab);
+  if (!L) { $("#panel").innerHTML = "<p>No leagues found.</p>"; return; }
+  const o = L.opponent;
+  const myProj = mode === "rec" ? L.proj_rec : mode === "sleeper" ? L.proj_rec_sleeper : L.proj_cur;
+  let h = '<div class="head"><h2>' + esc(L.name) + '</h2><div class="fmt">' + esc(L.format) + '</div>' +
+    '<div class="me">' + esc(L.team_name) + ' · ' + esc(L.record) + ' · ' + L.pf + ' PF</div></div>';
+  h += '<div class="board"><div class="side"><div class="t">You</div><div class="n">' + myProj.toFixed(1) + '</div><div class="r">' +
+    esc(MODES.find(m => m[0] === mode)[1].toLowerCase()) + '</div></div><div class="vs">VS</div>' +
+    '<div class="side right"><div class="t">' + esc(o ? o.team : "No matchup") + '</div><div class="n">' + (o ? o.proj.toFixed(1) : "–") +
+    '</div><div class="r">' + esc(o ? o.owner + " · " + o.record : "") + '</div></div>' +
+    '<div class="note">' + (L.any_locked ? 'Totals use real points for games already played. ' : '') + 'Recommended ' + L.proj_rec.toFixed(1) + ' (adj) · Sleeper-only best ' + L.proj_rec_sleeper.toFixed(1) +
+    ' · Your current lineup ' + L.proj_cur.toFixed(1) + ' (Sleeper proj)</div></div>';
+  h += '<div class="seg" role="group">' + MODES.map(m => '<button data-m="' + m[0] + '" aria-pressed="' + (mode === m[0]) + '">' + m[1] + '</button>').join("") + '</div>';
+  if (L.alerts.length) {
+    const lv = {bad: "Fix", change: "Swap", warn: "Watch", call: "Your call", info: "Note"};
+    const order = {bad: 0, change: 1, warn: 2, call: 3, info: 4};
+    h += '<ul class="alerts">' + L.alerts.slice().sort((a, b) => order[a.level] - order[b.level])
+      .map(a => '<li class="' + a.level + '"><span class="lv">' + lv[a.level] + '</span>' + esc(a.text) + '</li>').join("") + '</ul>';
+  } else {
+    h += '<ul class="alerts"><li class="info"><span class="lv" style="color:var(--good)">All set</span>Your Sleeper lineup already matches the recommendation.</li></ul>';
+  }
+  h += '<div class="sect"><span>Starters</span><span>' + (mode === "cur" ? "Sleeper proj" : mode === "rec" ? "Adj proj" : "Sleeper proj") + '</span></div><div class="card">';
+  const shown = new Set();
+  L.lineup.forEach(s => {
+    const p = mode === "rec" ? s.rec : mode === "sleeper" ? s.sleeper : s.cur;
+    if (p) shown.add(p.id);
+    const changed = mode !== "cur" && p && (!s.cur || s.cur.id !== p.id);
+    const curInLineup = s.cur && L.lineup.some(x => (mode === "rec" ? x.rec : x.sleeper) && (mode === "rec" ? x.rec : x.sleeper).id === s.cur.id);
+    h += row(s.slot, s.label, p, {changed: changed && !curInLineup, replaces: changed && !curInLineup && s.cur ? s.cur.name : (changed && !s.cur ? "empty slot" : "")});
+  });
+  h += '</div>';
+  const pool = {};
+  L.bench.forEach(p => pool[p.id] = p);
+  L.lineup.forEach(s => ["rec", "cur", "sleeper"].forEach(k => { if (s[k]) pool[s[k].id] = s[k]; }));
+  const bench = Object.values(pool).filter(p => !shown.has(p.id) && !p.reserve && !p.taxi)
+    .sort((a, b) => (b.available - a.available) || (b.adj - a.adj));
+  h += '<div class="sect"><span>Bench</span><span>' + bench.length + '</span></div><div class="card">' +
+    (bench.length ? bench.map(p => row("BN", "BN", p)).join("") : '<div class="prow"><div></div><div></div><div class="who"><div class="ln">Empty</div></div><div></div></div>') + '</div>';
+  if (L.stash.length) {
+    h += '<div class="sect"><span>IR / Taxi</span><span>' + L.stash.length + '</span></div><div class="card">' +
+      L.stash.map(p => row("BN", p.reserve ? "IR" : "TX", p)).join("") + '</div>';
+  }
+  h += '<p class="legend">Big number = projected points with this league\'s scoring. "Adj" moves Sleeper\'s projection ' +
+    (DATA.matchup_weight * 100).toFixed(0) + '% of the way toward what the opposing defense usually gives up to that position. ' +
+    'Matchup tag: <span class="mu tough">red = top-8 toughest</span> <span class="mu easy">green = top-8 easiest</span>. ' +
+    'Orange rows are changes from your current Sleeper lineup. <span style="color:var(--good)">Green numbers</span> are real points from games already played (FINAL) or in progress (LIVE), with the projection underneath. Those players are locked, so they\'re never moved.</p>';
+  $("#panel").innerHTML = h;
+  document.querySelectorAll(".seg button").forEach(b => b.onclick = () => { mode = b.dataset.m; store.set("mode", mode); render(); });
+  $("#foot").textContent = "Read-only: Sleeper's API can't change lineups, so make swaps in the app. Re-run python3 benchpress.py to refresh.";
+}
+render();
+</script>
+</body>
+</html>
