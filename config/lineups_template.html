@@ -13,6 +13,7 @@
   --accent:#f2a33a; --accent-ink:#1a1206;
   --good:#3ccf8e; --bad:#ff5c6c; --warn:#f5c64a; --call:#b48cff; --info:#5fb3ff;
   --qb:#fc2b6d; --rb:#20ceb8; --wr:#56c9f8; --te:#feae58; --k:#c96cff; --def:#bf755d;
+  --dl:#e5785a; --lb:#8fbf4d; --db:#6f8cff;
   --display:"Big Shoulders Display",Impact,"Arial Narrow",sans-serif;
   --body:"Public Sans",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
   --mono:"JetBrains Mono",ui-monospace,Menlo,monospace;
@@ -83,6 +84,8 @@ h1 a:hover{text-decoration:underline;text-decoration-color:var(--accent);text-un
 .slot{height:26px;border-radius:7px;font:800 13px/26px var(--body);text-align:center;color:#0d1220;background:#8796ad;letter-spacing:.02em}
 .slot.QB{background:var(--qb)} .slot.RB{background:var(--rb)} .slot.WR{background:var(--wr)} .slot.TE{background:var(--te)}
 .slot.K{background:var(--k)} .slot.DEF{background:var(--def)}
+.slot.DL{background:var(--dl)} .slot.LB{background:var(--lb)} .slot.DB{background:var(--db)}
+.slot.IDP_FLEX{background:linear-gradient(135deg,var(--dl),var(--lb) 55%,var(--db))}
 .slot.FLEX{background:linear-gradient(135deg,var(--rb),var(--wr) 55%,var(--te))}
 .slot.SUPER_FLEX{background:linear-gradient(135deg,var(--qb),var(--wr) 60%,var(--te))}
 .slot.WRRB_FLEX{background:linear-gradient(135deg,var(--rb),var(--wr))}
@@ -113,6 +116,7 @@ h1 a:hover{text-decoration:underline;text-decoration-color:var(--accent);text-un
 .sample code{font-family:var(--mono)}
 footer{font-size:12px;color:var(--dim);border-top:1px solid var(--line);padding-top:12px}
 .ver{font:11px/1.6 var(--mono);color:var(--dim);margin-top:8px}
+.ver a{color:var(--accent)}
 .tip .tag{margin-bottom:6px}
 .tip a{color:var(--accent);font-weight:600}
 @media (max-width:520px){

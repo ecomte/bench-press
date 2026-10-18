@@ -95,7 +95,9 @@ def version_html():
             m = re.search(r"img\.shields\.io/badge/release-v([0-9][^-)]*)", f.read())
     except OSError:
         m = None
-    ver = "Bench Press Version: %s<br>" % m.group(1) if m else ""
+    # tags are the bare number (1.0.1), so the release page is releases/tag/<version>
+    ver = ('Bench Press Version: %s. Changelog: <a href="https://github.com/ecomte/bench-press/releases/tag/%s" '
+           'target="_blank" rel="noopener">GitHub</a><br>' % (m.group(1), m.group(1))) if m else ""
     return ver + "Copyright &copy; 2026 E Comte"
 
 
@@ -112,9 +114,10 @@ def page_html(d, live=False):
     return tpl.replace("/*__DATA__*/null", blob)
 
 
-def landing_html(users):
+def landing_html(users, ntfy_topic=None):
     """The hosted site's front page: same look as the lineup pages, with a Sleeper username
-    search. A name with a built page links to it; any other name gets a live/?u= link."""
+    search. A name with a built page links to it; any other name gets a live/?u= link.
+    ntfy_topic: when set, opening a live page from here sends the owner a phone notification."""
     import html as H
     import re
     with open(os.path.join(ROOT, "config", "lineups_template.html")) as f:
@@ -126,6 +129,7 @@ def landing_html(users):
 <html lang="en">
 <head>%s
 <style>
+.pitch{color:var(--ink);margin:0 0 10px;font-size:15px;max-width:620px}
 .find{display:flex;gap:8px;flex-wrap:wrap}
 .find input{flex:1 1 200px;min-width:0;background:var(--panel);color:var(--ink);border:1px solid var(--line);border-radius:999px;padding:10px 16px;font:500 15px var(--body)}
 .find input:focus{outline:2px solid var(--accent);outline-offset:1px}
@@ -148,6 +152,7 @@ def landing_html(users):
     <div class="eyebrow">Sleeper lineup helper</div>
     <h1><a href="./" title="Bench Press home">Bench <span>Press</span></a></h1>
     <p class="tag">Let's eat a W.</p>
+    <p class="pitch">In a pile of Sleeper leagues? Tired of spending hours fixing every lineup? Bench Press checks each of your teams and flags the swaps that matter, based on recent performance, injuries and how tough each opposing defense is.</p>
     <p class="sub">Search your Sleeper username to open your lineups.</p>
   </header>
   <form class="find" id="find" role="search">
@@ -161,6 +166,7 @@ def landing_html(users):
 </div>
 <script>
 const PEOPLE = %s;
+const NTFY = %s;  // ntfy_topic in config/config.json; "" turns the new-user notification off
 const esc = (s) => String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const getJSON = async (url) => { const r = await fetch(url); return r.ok ? r.json() : null; };
 let STATIC;  // season and ignored leagues, from the site's own data
@@ -212,11 +218,23 @@ document.getElementById("find").onsubmit = async (e) => {
   if (hit) { box.innerHTML = card(user, leagues, encodeURIComponent(hit.tag) + "/", hit.name); return; }
   box.innerHTML = card(user, leagues, "live/?u=" + encodeURIComponent(q), q)
     + '<p class="msg" style="margin-top:10px">No saved page yet, so this one builds live from Sleeper.</p>';
+  box.querySelector(".btn").addEventListener("click", () => notifyOwner(q, leagues));
 };
+// The first time this device opens a live page for a name with no saved page, tell the owner's
+// phone through the free ntfy app. It's fire-and-forget, so the visitor sees no difference.
+function notifyOwner(name, leagues) {
+  if (!NTFY) return;
+  const key = "benchpress.notified." + name.toLowerCase();
+  try { if (localStorage.getItem(key)) return; localStorage.setItem(key, "1"); } catch (e) {}
+  const n = leagues ? leagues.length : null;
+  const msg = "New Bench Press user: " + name + (n === null ? "" : " (" + n + " league" + (n === 1 ? "" : "s") + ")");
+  const url = "https://ntfy.sh/" + encodeURIComponent(NTFY) + "?title=" + encodeURIComponent("Bench Press") + "&tags=football";
+  try { navigator.sendBeacon(url, msg); } catch (e) {}
+}
 </script>
 </body>
 </html>
-""" % (head, tip, version_html(), people)
+""" % (head, tip, version_html(), people, json.dumps(ntfy_topic or ""))
 
 
 def live_page_html():

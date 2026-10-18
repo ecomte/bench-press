@@ -16,7 +16,7 @@ examples:
 what it writes (in this folder):
   lineups/lineups-<user>.html    tabbed lineup page, one tab per team (mine: lineups/lineups-ecomte.html)
   reports/<season>_weekNN.md     weekly report: give this to Claude
-  sheets/*.csv                   QB/RB/WR/TE/K/DEF + DEF_vs_POS, shared by everyone
+  sheets/*.csv                   QB/RB/WR/TE/K/DEF/IDP + DEF_vs_POS, shared by everyone
                                  (rostered_by column says whose team each player is on)
   sheets/<user>/                 that person's lineups.csv and game_log.csv
   data/                          API cache, roster snapshot, artifact.html (phone copy)
@@ -222,6 +222,10 @@ def main():
             locked = gstate in ("live", "final")
             actual = A.score(live_stats[pid], ss) if (locked and pid in live_stats) else (0.0 if locked else None)
             sleeper_pts = A.score((pr or {}).get("stats"), ss)
+            if pos in A.IDP_POS and not sleeper_pts:
+                # no Sleeper projection for this defender: use his season average in this league's scoring
+                past = [A.score(e["stats"], ss) for e in logs.get(pid, [])]
+                sleeper_pts = sum(past) / len(past) if past else 0.0
             opp = game["opp"] if game else None
             row = dvp.get(pos, {}).get(opp) if opp else None
             mult = row["mult"] if row else 1.0
@@ -247,7 +251,7 @@ def main():
                         notes.append("His QB %s is %s" % (x["name"], x["status"]))
             return {
                 "id": pid, "name": A.player_name(pid, pl) if pos != "DEF" else (pl.get("first_name", pid) + " " + pl.get("last_name", "")).strip(),
-                "pos": pos, "team": team, "status": status,
+                "pos": pos, "fpos": A.player_fpos(pl, pos), "team": team, "status": status,
                 "opp": opp, "home": game["home"] if game else None, "day": A.day_label(game["date"]) if game else "",
                 "date": game["date"] if game else None,
                 "sleeper": round(sleeper_pts * factor, 2), "adj": round(adj * factor, 2),
@@ -423,7 +427,10 @@ def main():
     # ---- sheets -----------------------------------------------------------------------
     print("Writing sheets...")
     proj_half = {pid: A.num((r.get("stats") or {}).get("pts_half_ppr")) for pid, r in proj.items()}
-    sheet_rows = {p: [] for p in A.ALL_POS}
+    proj_idp = {pid: A.score(r.get("stats"), A.IDP_SCORING) for pid, r in proj.items()}
+    # one IDP sheet for DL, LB and DB: they share the same stats (pos column tells them apart)
+    sheet_of = {p: ("IDP" if p in A.IDP_POS else p) for p in A.ALL_POS}
+    sheet_rows = {p: [] for p in set(sheet_of.values())}
     pids = set(logs) | set(rostered)
     for pid in pids:
         pl = players.get(pid) or meta.get(pid) or {}
@@ -435,6 +442,7 @@ def main():
         opp = game["opp"] if game else None
         row = dvp.get(pos, {}).get(opp) if opp else None
         mult = row["mult"] if row else 1.0
+        pj = proj_idp.get(pid, 0) if pos in A.IDP_POS else proj_half.get(pid, 0)
         base = {
             "player": A.player_name(pid, pl), "pos": pos, "team": team,
             "rostered_by": "; ".join(rostered.get(pid, [])), "injury": injury_of(pid),
@@ -447,8 +455,8 @@ def main():
             "opp_toughness_rank": row["rank"] if row else "",
             "opp_matchup": A.matchup_text(pos, row),
             "opp_multiplier": mult if row else "",
-            "sleeper_proj_half": round(proj_half.get(pid, 0), 2),
-            "matchup_adj_proj_half": round(proj_half.get(pid, 0) * (1 + W * (mult - 1)), 2),
+            "sleeper_proj_half": round(pj, 2),
+            "matchup_adj_proj_half": round(pj * (1 + W * (mult - 1)), 2),
             "player_id": pid,
         })
         if pos == "DEF":
@@ -461,7 +469,7 @@ def main():
             })
         if base["gp"] == 0 and not base["rostered_by"]:
             continue
-        sheet_rows[pos].append(base)
+        sheet_rows[sheet_of[pos]].append(base)
 
     head = ["player", "pos", "team", "rostered_by", "injury", "bye_week", "next_opp", "next_game_day",
             "opp_toughness_rank", "opp_matchup", "opp_multiplier", "sleeper_proj_half", "matchup_adj_proj_half",
@@ -474,10 +482,18 @@ def main():
         "TE": ["targets", "tgt_pg", "rec", "rec_yd", "rec_td", "fum_lost"],
         "K": ["fgm", "fga", "fg_long", "xpm", "xpa"],
         "DEF": ["pts_allow_pg", "yds_allow_pg", "sacks", "ints", "fum_rec"],
+        "IDP": [col for _, col in A.IDP_STATS],
     }
+    # IDP points use A.IDP_SCORING, not half PPR, so those columns get their own names
+    idp_names = {"sleeper_proj_half": "sleeper_proj_idp", "matchup_adj_proj_half": "matchup_adj_proj_idp",
+                 "avg_half_ppr": "avg_idp_pts", "last3_avg_half": "last3_avg_idp"}
+    idp_skip = {"avg_ppr", "avg_vs_top10_def", "games_vs_top10_def", "avg_vs_other_def"}
     for pos, rows in sheet_rows.items():
         rows.sort(key=lambda r: (r["rostered_by"] == "", -A.num(r["avg_half_ppr"])))
         cols = [c for c in head if not (pos in ("K", "DEF") and c == "snap_pct")] + statcols[pos] + ["player_id"]
+        if pos == "IDP":
+            rows = [{idp_names.get(k, k): v for k, v in r.items()} for r in rows]
+            cols = [idp_names.get(c, c) for c in cols if c not in idp_skip]
         write_csv(os.path.join(SHEETS, "%s.csv" % pos), rows, cols)
 
     dv_rows = []
@@ -492,6 +508,10 @@ def main():
         x = dvp.get("DEF", {}).get(t)
         r["offense_gives_DEF_pg"] = round(x["allowed_pg"], 2) if x else ""
         r["offense_vs_DEF_rank"] = x["rank"] if x else ""
+        for pos in A.IDP_POS:  # IDP points (A.IDP_SCORING) this offense gives up to each defender group
+            x = dvp.get(pos, {}).get(t)
+            r["offense_gives_%s_pg" % pos] = round(x["allowed_pg"], 2) if x else ""
+            r["offense_vs_%s_rank" % pos] = x["rank"] if x else ""
         g = sched.game(week, t)
         r["week%d_opp" % week] = (("vs " if g["home"] else "@ ") + g["opp"]) if g else "BYE"
         dv_rows.append(r)
@@ -509,7 +529,9 @@ def main():
                        "rush_att": s.get("rush_att", ""), "rush_yd": s.get("rush_yd", ""), "rush_td": s.get("rush_td", ""),
                        "targets": s.get("rec_tgt", ""), "rec": s.get("rec", ""), "rec_yd": s.get("rec_yd", ""),
                        "rec_td": s.get("rec_td", ""),
-                       "snap_pct": round(100 * A.num(s.get("off_snp")) / A.num(s.get("tm_off_snp")), 1) if A.num(s.get("tm_off_snp")) else "",
+                       "tackles": s.get("idp_tkl", ""), "sacks": s.get("idp_sack", ""), "idp_int": s.get("idp_int", ""),
+                       "snap_pct": round(100 * A.num(s.get("off_snp")) / A.num(s.get("tm_off_snp")), 1) if A.num(s.get("tm_off_snp")) else
+                                   (round(100 * A.num(s.get("def_snp")) / A.num(s.get("tm_def_snp")), 1) if A.num(s.get("tm_def_snp")) else ""),
                        "leagues": "; ".join(owned[pid])})
     gl.sort(key=lambda r: (r["pos"] or "", r["player"], r["week"]))
     write_csv(os.path.join(USER_SHEETS, "game_log.csv"), gl)
@@ -529,7 +551,7 @@ def main():
     write_csv(os.path.join(USER_SHEETS, "lineups.csv"), lu)
 
     # tidy up sheets from the old layout (per-person copies of the shared sheets)
-    stale = [os.path.join(USER_SHEETS, n + ".csv") for n in A.ALL_POS + ["DEF_vs_POS", "my_game_log"]]
+    stale = [os.path.join(USER_SHEETS, n + ".csv") for n in A.OFF_POS + ["DEF", "DEF_vs_POS", "my_game_log"]]
     if not other:
         stale += [os.path.join(SHEETS, "lineups.csv"), os.path.join(SHEETS, "my_game_log.csv")]
     for path in stale:

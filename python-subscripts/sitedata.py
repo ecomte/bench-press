@@ -22,6 +22,8 @@ BASE_SCORING_KEYS = [
     "def_td", "def_st_td", "st_td", "sack", "int", "fum_rec", "safe", "blk_kick", "def_4_and_stop",
     "pts_allow_0", "pts_allow_1_6", "pts_allow_7_13", "pts_allow_14_20", "pts_allow_21_27",
     "pts_allow_28_34", "pts_allow_35p",
+    "idp_tkl", "idp_tkl_solo", "idp_tkl_ast", "idp_tkl_loss", "idp_sack", "idp_qb_hit", "idp_int",
+    "idp_pass_def", "idp_ff", "idp_fum_rec", "idp_def_td", "idp_safe", "idp_blk_kick",
     "pts_half_ppr",
 ]
 
