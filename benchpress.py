@@ -11,6 +11,7 @@ examples:
   python3 benchpress.py -u SomeFriend  run it for a friend -> lineups/lineups-somefriend.html
   python3 benchpress.py -u SomeFriend -w 8 -o
   python3 batchbenchpress.py           me + every friend in config batch_users
+  python3 benchpress.py --site site    also write site/<user>/index.html (the GitHub Pages copy)
 
 what it writes (in this folder):
   lineups/lineups-<user>.html    tabbed lineup page, one tab per team (mine: lineups/lineups-ecomte.html)
@@ -19,6 +20,7 @@ what it writes (in this folder):
                                  (rostered_by column says whose team each player is on)
   sheets/<user>/                 that person's lineups.csv and game_log.csv
   data/                          API cache, roster snapshot, artifact.html (phone copy)
+  <site>/<user>/index.html       with --site: the hosted page (loads photos from Sleeper's CDN)
   (a friend's run uses lineups/lineups-<user>.html and reports/<user>/)
 
 after a run:
@@ -90,6 +92,9 @@ def main():
     ap.add_argument("-u", "--user", metavar="USERNAME",
                     help="run for a different Sleeper username, e.g. a friend (a leading @ is fine). "
                          "Output goes to lineups/lineups-<username>.html, reports/<username>/ and sheets/<username>/")
+    ap.add_argument("--site", metavar="DIR",
+                    help="also write the page to DIR/<username>/index.html for the hosted site, and skip the "
+                         "photo-embedded claude.ai copy (the hosted page loads photos from Sleeper's CDN)")
     args = ap.parse_args()
 
     cfg = load_config()
@@ -528,13 +533,6 @@ def main():
         f.write(render.report_md(payload, dvp))
     with open(os.path.join(DATA, "latest%s.json" % (("_" + tag) if other else "")), "w") as f:
         json.dump(payload, f, indent=1)
-    print("Player photos for the phone page...")
-    seen = {}
-    for L in out_leagues:
-        people = L["bench"] + L["stash"] + [s[k] for s in L["lineup"] for k in ("rec", "cur", "sleeper") if s[k]]
-        for p in people:
-            seen[p["id"]] = (p["id"], p["pos"], p["team"])
-    photos = S.headshots(list(seen.values()))
     os.makedirs(LINEUPS, exist_ok=True)
     hpath = os.path.join(LINEUPS, "lineups-%s.html" % tag)
     moved = os.path.join(HERE, "lineups-%s.html" % tag)  # pages used to sit in the main folder
@@ -545,8 +543,23 @@ def main():
         os.remove(old_page)
     with open(hpath, "w") as f:
         f.write(render.page_html(payload))
-    with open(os.path.join(DATA, "artifact%s.html" % (("_" + tag) if other else "")), "w") as f:
-        f.write(render.artifact_html(payload, photos))
+    if args.site:
+        # hosted copy: same page, photos come straight from sleepercdn.com
+        site_dir = os.path.join(os.path.abspath(args.site), tag)
+        os.makedirs(site_dir, exist_ok=True)
+        with open(os.path.join(site_dir, "index.html"), "w") as f:
+            f.write(render.page_html(payload))
+        print("Site:    %s" % os.path.join(site_dir, "index.html"))
+    else:
+        print("Player photos for the phone page...")
+        seen = {}
+        for L in out_leagues:
+            people = L["bench"] + L["stash"] + [s[k] for s in L["lineup"] for k in ("rec", "cur", "sleeper") if s[k]]
+            for p in people:
+                seen[p["id"]] = (p["id"], p["pos"], p["team"])
+        photos = S.headshots(list(seen.values()))
+        with open(os.path.join(DATA, "artifact%s.html" % (("_" + tag) if other else "")), "w") as f:
+            f.write(render.artifact_html(payload, photos))
 
     print("")
     for L in out_leagues:

@@ -26,6 +26,7 @@ Sleeper API ──► GitHub Actions (scheduled) ──► benchpress.py for eac
 - **Schedule (US Eastern):** hourly Tuesday through Saturday, every 15 minutes on Sunday from noon to midnight, plus Monday and Thursday nights. A build can also be started by hand from the Actions tab.
 - **Secrets:** none. Sleeper's API is public and read-only, and everything in this repo is already public on Sleeper.
 - **Users:** the people built on each run are listed in `batch_users` in `config/config.json`. Adding a friend is a one-line change.
+- **Workflow:** `.github/workflows/build.yml`. Builds run on any branch so a feature branch can be checked from the Actions tab; only `main` deploys.
 - **Branches:** `main` is what's deployed. Work happens on `feature/BP-<n>-...` branches and merges through `develop`.
 
 ## Run it locally
@@ -38,6 +39,7 @@ python3 benchpress.py -w 8              # look ahead to week 8
 python3 benchpress.py -u SomeFriend     # someone else's Sleeper username
 python3 batchbenchpress.py              # everyone in batch_users
 python3 batchbenchpress.py --no-open    # same, without opening browser tabs
+python3 batchbenchpress.py --no-open --site site   # build the hosted site into site/ (what Actions runs)
 ```
 
 The first run takes about 20 seconds, because it downloads Sleeper's 5 MB player list, which is then cached for a day. Output goes to folders that git ignores:
