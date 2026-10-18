@@ -6,7 +6,9 @@ name: Build and deploy lineups
 
 on:
   schedule:
-    - cron: "0 * * * *"          # hourly, every day
+    # Hourly, every day, from 7 AM to midnight ET plus one 4 AM run. These UTC hours cover
+    # those times in both EDT and EST; the "when" job drops the extra hour each season.
+    - cron: "0 0-5,8,9,11-23 * * *"
     - cron: "*/15 16-23 * * 0"   # every 15 min, Sunday noon to 8 PM ET
     - cron: "*/15 0-4 * * 1"     # every 15 min, Sunday 8 PM to midnight ET
     - cron: "*/15 23 * * 1,4"    # Monday and Thursday night games, 7 PM ET...
@@ -27,7 +29,28 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # Quiet overnight: the hourly schedule only builds at midnight, 4 AM and 7 AM-11 PM
+  # Eastern. Game-window runs, pushes and manual runs always build.
+  when:
+    runs-on: ubuntu-latest
+    outputs:
+      go: ${{ steps.check.outputs.go }}
+    steps:
+      - id: check
+        env:
+          SCHEDULE: ${{ github.event.schedule }}
+        run: |
+          hour=$(TZ=America/New_York date +%-H)
+          go=true
+          if [ "$SCHEDULE" = "0 0-5,8,9,11-23 * * *" ]; then
+            case "$hour" in 1|2|3|5|6) go=false ;; esac
+          fi
+          echo "Eastern hour $hour, build: $go"
+          echo "go=$go" >> "$GITHUB_OUTPUT"
+
   build:
+    needs: when
+    if: needs.when.outputs.go == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
