@@ -1,0 +1,57 @@
+# Cascading merge: every push to main (a release or hotfix merge) is merged
+# back into develop, so develop never falls behind main.
+# If the merge conflicts, nothing is pushed; a pull request from main to develop
+# is opened instead so the conflict can be resolved by hand.
+name: Cascade main into develop
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: cascade-merge
+  cancel-in-progress: false
+
+jobs:
+  cascade:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: develop
+          fetch-depth: 0
+
+      - name: Merge main into develop
+        id: merge
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git fetch origin main
+          if git merge-base --is-ancestor origin/main HEAD; then
+            echo "develop already contains main; nothing to do."
+            exit 0
+          fi
+          if git merge --no-ff origin/main -m "Merge branch 'main' into develop (cascade)"; then
+            git push origin develop
+          else
+            git merge --abort
+            echo "conflict=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Open a pull request on conflict
+        if: steps.merge.outputs.conflict == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          existing=$(gh pr list --base develop --head main --state open --json number --jq 'length')
+          if [ "$existing" = "0" ]; then
+            gh pr create --base develop --head main \
+              --title "Cascade main into develop (merge conflict)" \
+              --body "The automatic merge of main into develop hit a conflict. Resolve it here and merge."
+          fi
+          exit 1
