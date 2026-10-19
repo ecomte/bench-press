@@ -11,7 +11,7 @@
   --bg:#10151f; --panel:#18202f; --row:#1d2738; --row2:#222d40; --line:#2a3548;
   --ink:#eef2f8; --muted:#8f9bb0; --dim:#5e6a80;
   --accent:#f2a33a; --accent-ink:#1a1206;
-  --good:#3ccf8e; --bad:#ff5c6c; --warn:#f5c64a; --call:#b48cff; --info:#5fb3ff;
+  --good:#3ccf8e; --bad:#ff5c6c; --warn:#f5c64a; --hold:#e8772e; --call:#b48cff; --info:#5fb3ff;
   --qb:#fc2b6d; --rb:#20ceb8; --wr:#56c9f8; --te:#feae58; --k:#c96cff; --def:#bf755d;
   --dl:#e5785a; --lb:#8fbf4d; --db:#6f8cff;
   --display:"Big Shoulders Display",Impact,"Arial Narrow",sans-serif;
@@ -98,6 +98,7 @@ h1 a:hover{text-decoration:underline;text-decoration-color:var(--accent);text-un
 .who .ln{font:12px var(--mono);color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .who .ln b{color:var(--ink);font-weight:500}
 .who .nt{font-size:12px;color:var(--warn);margin-top:2px}
+.who .nt .feast{color:var(--good)} .who .nt .hold{color:var(--hold)}
 .who .rp{font-size:12px;color:var(--accent);margin-top:2px}
 .who .as{font-size:12px;color:var(--call);margin-top:2px}
 .who .as.dim{color:var(--dim)}
@@ -189,6 +190,11 @@ function muChip(p) {
   const cls = q <= 0.25 ? "tough" : q > 0.75 ? "easy" : "";
   return '<span class="mu ' + cls + '" title="Defense toughness rank ' + p.rank + ' of ' + p.of + ' (1 = toughest)">' + esc(p.matchup) + '</span>';
 }
+// W Feast notes in green, tough-D notes in darker orange; the rest keep the yellow
+function noteHtml(n) {
+  const cls = /^W Feast:/.test(n) ? "feast" : /^Handles tough Ds/.test(n) ? "hold" : "";
+  return cls ? '<span class="' + cls + '">' + esc(n) + "</span>" : esc(n);
+}
 function row(slot, label, p, opts) {
   opts = opts || {};
   const cls = ["prow"];
@@ -235,7 +241,7 @@ function row(slot, label, p, opts) {
     '<div class="who"><div class="nm">' + esc(p.name) + injTag(p) + '</div>' +
     '<div class="ln"><b>' + esc(p.pos) + ' · ' + esc(p.team || "FA") + '</b>  ' + esc(game) + '  ·  ' + esc(avg) + '</div>' +
     (opts.replaces ? '<div class="rp">↑ in for ' + esc(opts.replaces) + '</div>' : "") + asLine +
-    (p.notes && p.notes.length ? '<div class="nt">' + p.notes.map(esc).join(" · ") + '</div>' : "") +
+    (p.notes && p.notes.length ? '<div class="nt">' + p.notes.map(noteHtml).join(" · ") + '</div>' : "") +
     '</div>' +
     '<div class="pts"><div class="big' + (played ? " act" : "") + '">' + gameTag + ((p.available || played || (a && a.state === "in")) ? val.toFixed(1) : "—") + '</div>' +
     (second ? '<div class="sm">' + esc(second) + '</div>' : "") + (played ? "" : muChip(p)) + '</div>' +
@@ -343,7 +349,7 @@ function render() {
   }
   h += '<p class="legend">Big number = projected points with this league\'s scoring. "Adj" moves Sleeper\'s projection ' +
     (DATA.matchup_weight * 100).toFixed(0) + '% of the way toward what the opposing defense usually gives up to that position. ' +
-    'Smash spots (the 3 easiest defenses vs a position) get an extra boost on top, and players who\'ve handled tough defenses better than most get part of a tough-matchup penalty waived; the player notes say when. ' +
+    '<span style="color:var(--good)">W Feast</span> spots (the 3 easiest defenses vs a position) get an extra boost on top, and <span style="color:var(--hold)">players who\'ve handled tough defenses</span> better than most get part of a tough-matchup penalty waived; the player notes say when. ' +
     'Matchup tag: <span class="mu tough">red = top-8 toughest</span> <span class="mu easy">green = top-8 easiest</span>. ' +
     'Orange rows are changes from your current Sleeper lineup. <span style="color:var(--good)">Green numbers</span> are real points from games already played (FINAL) or in progress (LIVE), with the projection underneath. Those players are locked, so they\'re never moved. ' +
     '<span style="color:var(--call)">⇄ Auto-sub</span> lines show the bench player you picked in Sleeper to cover a starter: if the starter doesn\'t play, the sub\'s points count, and the totals include that.</p>';
