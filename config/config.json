@@ -2,6 +2,10 @@
   "username": "EComte",
   "user_id": "588851403624067072",
   "matchup_weight": 0.5,
+  "easy_matchup_boost": 0.3,
+  "easy_matchup_ranks": 3,
+  "smash_alert_gap": 3.0,
+  "history_seasons": 1,
   "league_nicknames": {
     "1312920511637913600": "Nyarsh",
     "1389723242784124928": "Game of Games 2",

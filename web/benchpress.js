@@ -90,6 +90,15 @@
     return r <= of / 2 ? ordinal(r) + "-toughest vs " + pos : ordinal(of - r + 1) + "-easiest vs " + pos;
   }
 
+  const SKILL_POS = ["QB", "RB", "WR", "TE"];
+
+  // matchup_mult() in analysis.py: a tough-matchup penalty, partly waived for players who hold up
+  function matchupMult(row, hold) {
+    let mult = row ? row.mult : 1.0;
+    if (mult < 1 && hold) mult = pyRound(1 - (1 - mult) * (1 - hold), 3);
+    return mult;
+  }
+
   function parseDate(s) {
     const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s || "");
     return m ? new Date(+m[1], +m[2] - 1, +m[3]) : null;
@@ -184,6 +193,60 @@
     const playing = this.byWeek[w] || {};
     return [...this.teams()].filter(t => !(t in playing)).sort();
   };
+
+  // ---- auto-subs (auto_subs, sub_state, sub_can_score, sub_options in analysis.py) -------------
+
+  const AUTO_SUB_KEYS = ["auto_subs", "autosubs", "auto_sub", "subs"];
+  const STARTER_KEYS = ["starter", "starter_id", "player_id", "original", "from"];
+  const SUB_KEYS = ["sub", "sub_id", "auto_sub", "substitute", "to"];
+  const isObj = (v) => v && typeof v === "object" && !Array.isArray(v);
+
+  function autoSubs(...objs) {
+    for (const o of objs) {
+      for (const where of [o || {}, (o || {}).metadata || {}, (o || {}).settings || {}]) {
+        if (!isObj(where)) continue;
+        for (const k of AUTO_SUB_KEYS) {
+          const v = where[k];
+          const out = {};
+          if (isObj(v)) {
+            for (const a in v) if (a && v[a] && String(v[a]) !== "0") out[String(a)] = String(v[a]);
+          } else if (Array.isArray(v)) {
+            for (const e of v) {
+              let a, b;
+              if (isObj(e)) {
+                a = (STARTER_KEYS.find(x => e[x]) || null); a = a && e[a];
+                b = (SUB_KEYS.find(x => e[x]) || null); b = b && e[b];
+              } else if (Array.isArray(e) && e.length === 2) [a, b] = e;
+              else continue;
+              if (a && b && String(b) !== "0") out[String(a)] = String(b);
+            }
+          }
+          if (Object.keys(out).length) return out;
+        }
+      }
+    }
+    return {};
+  }
+
+  function subState(s) {
+    if (s.locked) return (!s.available || (s.game_state === "final" && !s.played)) ? "in" : "unused";
+    if (!s.available) return "in";
+    return s.status === "Doubtful" ? "doubtful" : "backup";
+  }
+
+  const subCanScore = (b) => (b.locked ? (b.played || b.game_state === "live") : b.available);
+
+  function subOptions(slot, s, bench) {
+    const elig = SLOT_ELIG[slot] || [];
+    return bench.filter(b => b.available && !b.locked && b.date && s.date && b.date < s.date &&
+      (b.fpos || [b.pos]).some(x => elig.includes(x)));
+  }
+
+  // played() in analysis.py, plus Sleeper's game-day actives flag
+  function playedWeek(stats, pid) {
+    const s = stats || {};
+    return num(s.gp) > 0 || num(s.off_snp) > 0 || num(s.def_snp) > 0 || isAlpha(pid) || num(s.gms_active) > 0;
+  }
 
   // ---- lineup optimizer (fill_lineup in analysis.py) ------------------------------------
   // pool is an array of [pid, info] in roster order, so ties break the same way as Python.
@@ -293,6 +356,8 @@
     }
 
     const dvp = stat.dvp || {};
+    const tough = stat.tough || {};
+    const smashGap = num(stat.smash_gap === undefined ? 3.0 : stat.smash_gap);
     const logs = stat.logs || {};
     const inj = stat.injuries || {};
     const byesNow = sched.byes(week);
@@ -358,8 +423,10 @@
         }
         const opp = game ? game.opp : null;
         const row = opp ? ((dvp[pos] || {})[opp] || null) : null;
-        const mult = row ? row.mult : 1.0;
-        const adj = sleeperPts * (1 + W * (mult - 1));
+        const tp = SKILL_POS.includes(pos) ? (tough[pid] || null) : null;
+        const mult = matchupMult(row, tp ? tp.hold : 0);
+        const easy = row ? (row.easy || 0) : 0;
+        const adj = sleeperPts * (1 + W * (mult - 1) + easy);
         let why = "";
         if (!team) why = "Free agent / no team";
         else if (!game) why = "BYE";
@@ -376,6 +443,13 @@
             if (x.pos === "QB" && HURT.has(x.status)) notes.push("His QB " + x.name + " is " + x.status);
           }
         }
+        if (easy && sleeperPts) {
+          const pct = pyRound(100 * (W * (mult - 1) + easy), 0);
+          notes.push("Smash spot: " + matchupText(pos, row) + ", projection boosted " + (pct >= 0 ? "+" : "") + pct + "%");
+        }
+        if (tp && row && row.mult < 1) {
+          notes.push("Handles tough Ds better than most " + pos + "s: " + f1(tp.avg_tough) + " a game vs top-third defenses (" + tp.g_tough + " games), " + f1(tp.avg_other) + " otherwise");
+        }
         const last3 = pts.slice(-3);
         return {
           id: pid,
@@ -385,13 +459,16 @@
           date: game ? game.date : null,
           sleeper: r2(sleeperPts * factor), adj: r2(adj * factor),
           raw_sleeper: r2(sleeperPts),
-          mult, rank: row ? row.rank : null, of: row ? row.of : null,
+          mult, easy, hold: tp ? tp.hold : 0,
+          rank: row ? row.rank : null, of: row ? row.of : null,
           matchup: matchupText(pos, row), available: why === "",
           why, notes,
           gp: pts.length, avg: pts.length ? r1(pts.reduce((a, b) => a + b, 0) / pts.length) : null,
           last3: pts.length ? r1(last3.reduce((a, b) => a + b, 0) / last3.length) : null,
           reserve: reserve.has(pid), taxi: taxi.has(pid),
           locked, game_state: gstate, actual,
+          // took the field this week (Sleeper marks game-day actives with gms_active)
+          played: locked && playedWeek(liveStats[pid], pid),
           left: gameLeft(game, gstate, clock),
         };
       }
@@ -411,12 +488,41 @@
 
       const P = (pid) => (!pid || pid === "0") ? null : (pool.get(pid) || info(pid));
 
-      const lineup = slots.map((s, i) => {
-        const rId = SLOT_ELIG[s] ? rec[i] : (cur[i] !== "0" ? cur[i] : null);
-        return { slot: s, label: SLOT_LABEL[s] || s, rec: P(rId), cur: P(cur[i]), sleeper: P(recSleeper[i]) };
-      });
       const recSet = new Set(rec.filter(Boolean));
       const curSet = new Set(cur.filter(x => x && x !== "0"));
+
+      // ---- auto-subs: {starter: bench player whose points count if the starter doesn't play} ----
+      const mineMu = (mu || []).find(m => m.roster_id === mine.roster_id);
+      const subs = {};
+      for (const [a, b] of Object.entries(autoSubs(mineMu, mine))) if (curSet.has(a) && pool.has(b) && !curSet.has(b)) subs[a] = b;
+      // projected final: real points so far plus the projection for what's left of the game
+      const ptsOf = (p, key) => (p.locked ? (p.actual || 0) + p[key] * p.left : p[key]);
+      // slot_pts() in benchpress.py: a starter's points, counting his auto-sub when the sub isn't also starting
+      function slotPts(x, key, ids) {
+        const b = subs[x];
+        if (!b || ids.has(b)) return ptsOf(P(x), key);
+        const p = P(x), q = P(b);
+        const st = subState(p);
+        const sub = subCanScore(q) ? ptsOf(q, key) : 0;
+        if (st === "in") return sub;
+        if (st === "doubtful") return ptsOf(p, key) + 0.75 * sub;  // a Doubtful starter counts 25%; the sub covers the rest
+        return ptsOf(p, key);
+      }
+      function slotLive(x) {
+        const p = P(x), b = subs[x];
+        if (b && subState(p) === "in") return P(b).locked ? (P(b).actual || 0) : 0;
+        return p.locked ? (p.actual || 0) : 0;
+      }
+
+      const lineup = slots.map((s, i) => {
+        const rId = SLOT_ELIG[s] ? rec[i] : (cur[i] !== "0" ? cur[i] : null);
+        const entry = { slot: s, label: SLOT_LABEL[s] || s, rec: P(rId), cur: P(cur[i]), sleeper: P(recSleeper[i]) };
+        if (cur[i] in subs) {
+          entry.autosub = { player: P(subs[cur[i]]), state: subState(P(cur[i])),
+            adj: r2(slotPts(cur[i], "adj", new Set())), sleeper: r2(slotPts(cur[i], "sleeper", new Set())) };
+        }
+        return entry;
+      });
       const byName = (a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0);
       const bench = [...pool].filter(([pid, p]) => !recSet.has(pid) && !p.reserve && !p.taxi).map(([, p]) => p)
         .sort((a, b) => (b.adj - a.adj) || byName(a, b));
@@ -424,22 +530,48 @@
 
       // ---- alerts ----
       const alerts = [];
-      // projected final: real points so far plus the projection for what's left of the game
-      const ptsOf = (p, key) => (p.locked ? (p.actual || 0) + p[key] * p.left : p[key]);
       slots.forEach((s, i) => {
         const c = P(cur[i]);
         const lbl = SLOT_LABEL[s] || s;
         if (c && c.locked) return;
+        const b = P(subs[cur[i]]);
+        let ok = false;
+        if (b) {
+          // this starter has an auto-sub: say who covers him, and flag a sub that can't
+          ok = subCanScore(b);
+          if (!ok) {
+            alerts.push({ level: "bad", text: c.name + "'s auto-sub " + b.name + " " + (b.locked ? "didn't play" : "is " + (b.why !== "BYE" ? b.why : "on a bye")) + ". Pick a different auto-sub." });
+          } else if (!b.locked && b.date && c.date && b.date > c.date) {
+            alerts.push({ level: "bad", text: c.name + "'s auto-sub " + b.name + " plays after him (" + b.day + " vs " + c.day + "), so the sub can't kick in." });
+          } else if (!c.available) {
+            alerts.push({ level: "warn", text: c.name + " is " + (c.why !== "BYE" ? c.why : "on a bye") + " at " + lbl + "; his auto-sub " + b.name + " scores for him (" + f1(ptsOf(b, "sleeper")) + ")." });
+            return;
+          } else if (c.status === "Doubtful") {
+            alerts.push({ level: "warn", text: c.name + " is Doubtful (" + (c.day || "?") + " game); auto-sub " + b.name + " (" + (b.day || "?") + ") covers him if he sits." });
+            return;
+          }
+          if (ok && c.available) {
+            alerts.push({ level: "info", text: "Auto-sub set: " + b.name + " (" + (b.day || "?") + ", " + f1(ptsOf(b, "sleeper")) + ") covers " + c.name + " (" + (c.day || "?") + ")" +
+              (c.status === "Questionable" ? " if he's ruled out" : "") + "." });
+          }
+          if (c.status === "Questionable" && ok) return;  // covered: no need to watch the inactives
+        }
         if (!c) alerts.push({ level: "bad", text: "Empty " + lbl + " slot in your Sleeper lineup." });
         else if (!c.available) alerts.push({ level: "bad", text: c.name + " is starting at " + lbl + " but is " + (c.why !== "BYE" ? c.why : "on a bye") + "." });
         else if (c.status === "Doubtful") alerts.push({ level: "bad", text: c.name + " is Doubtful and in your lineup." });
-        else if (c.status === "Questionable") alerts.push({ level: "warn", text: c.name + " is Questionable (" + (c.day || "?") + " game). Check the inactives before kickoff." });
+        else if (c.status === "Questionable") {
+          const opts = b ? [] : subOptions(s, c, bench.filter(p => !curSet.has(p.id)));
+          alerts.push({ level: "warn", text: c.name + " is Questionable (" + (c.day || "?") + " game). Check the inactives before kickoff" +
+            (opts.length ? ", or set an auto-sub: " + opts[0].name + " (" + opts[0].day + ", " + f1(opts[0].sleeper) + ") plays earlier" : "") + "." });
+        }
         else if (c.raw_sleeper === 0 && c.pos !== "DEF") alerts.push({ level: "warn", text: c.name + " is starting with a 0.0 Sleeper projection." });
       });
       const ins = rec.filter(x => x && !curSet.has(x)).map(P);
       const outs = cur.filter(x => x && x !== "0" && !recSet.has(x)).map(P);
       if (ins.length || outs.length) {
-        const gain = ins.reduce((a, p) => a + p.adj, 0) - outs.filter(p => p.available).reduce((a, p) => a + p.adj, 0);
+        // a benched starter with an auto-sub was worth his sub's points, not nothing
+        const gain = ins.reduce((a, p) => a + p.adj, 0) -
+          outs.filter(p => p.available || p.id in subs).reduce((a, p) => a + (p.id in subs ? slotPts(p.id, "adj", curSet) : p.adj), 0);
         alerts.push({ level: "change", text: "Lineup change: start " + (ins.map(p => p.name + " (" + f1(p.adj) + ")").join(", ") || "-") +
           "; sit " + (outs.map(p => p.name + " (" + (p.available ? f1(p.adj) : p.why) + ")").join(", ") || "-") +
           " (about " + (gain >= 0 ? "+" : "") + f1(gain) + " pts)." });
@@ -452,10 +584,28 @@
         alerts.push({ level: "call", text: "Matchup call: Sleeper's projections alone would start " + sOnly.map(d).join(", ") +
           "; the matchup data prefers " + aOnly.map(d).join(", ") + ". Close one, your call." });
       }
+      // smash spots on the bench that came close: worth a look even with a lower number
+      for (const p of bench) {
+        if (!p.easy || !p.available || p.locked) continue;
+        const spots = slots.map((s, i) => [i, s]).filter(([i, s]) => rec[i] && !P(rec[i]).locked &&
+          (p.fpos || [p.pos]).some(x => (SLOT_ELIG[s] || []).includes(x)));
+        if (!spots.length) continue;
+        let [i] = spots[0];
+        for (const [j] of spots) if (P(rec[j]).adj < P(rec[i]).adj) i = j;
+        const q = P(rec[i]);
+        if (q.adj - p.adj <= smashGap) {
+          alerts.push({ level: "call", text: "Smash spot: " + p.name + " (" + f1(p.adj) + ") faces " + p.opp + ", the " + p.matchup +
+            ". Worth a look over " + q.name + " (" + f1(q.adj) + ") at " + (SLOT_LABEL[slots[i]] || slots[i]) + "." });
+        }
+      }
       for (const x of rec) {
         const p = P(x);
         if (p && p.locked) continue;
-        if (p && p.rank && p.rank <= 3 && p.pos !== "DEF") alerts.push({ level: "info", text: p.name + " faces " + p.opp + " (" + p.matchup + ")." });
+        if (p && p.rank && p.rank <= 3 && p.pos !== "DEF") {
+          const tp = p.hold ? tough[p.id] : null;
+          alerts.push({ level: "info", text: p.name + " faces " + p.opp + " (" + p.matchup + ")." + (tp ? " He's handled tough defenses better than most (" +
+            f1(tp.avg_tough) + " a game vs the top third, " + f1(tp.avg_other) + " otherwise), so the matchup counts against him less." : "") });
+        }
         if (p) {
           const qb = p.notes.find(n => n.startsWith("His QB"));
           if (qb) alerts.push({ level: "warn", text: p.name + ": " + qb });
@@ -465,6 +615,9 @@
       const done = cur.filter(x => x && x !== "0" && P(x).locked).map(P);
       if (done.length) alerts.push({ level: "info", text: "Already played (locked): " + done.map(p => p.name + " " + f1(p.actual || 0) + (p.game_state === "live" ? " live" : "")).join(", ") });
       if (early.length) alerts.push({ level: "info", text: "Plays before Sunday (lock early): " + early.map(p => p.name + " (" + p.day + ")").join(", ") });
+      for (const [a, b] of Object.entries(subs)) {
+        if (recSet.has(b) && !P(b).locked) alerts.push({ level: "info", text: "The recommendation starts " + P(b).name + ", your auto-sub for " + P(a).name + ". Pick a new auto-sub after the swap." });
+      }
       const irSlots = parseInt((lg.settings || {}).reserve_slots || 0, 10) || 0;
       if (irSlots && reserve.size < irSlots) {
         const canIr = bench.filter(p => ["IR", "Out", "PUP", "Doubtful", "Sus"].includes(p.status));
@@ -478,7 +631,6 @@
 
       // ---- fantasy opponent ----
       let oppInfo = null;
-      const mineMu = (mu || []).find(m => m.roster_id === mine.roster_id);
       if (mineMu && mineMu.matchup_id != null) {
         const o = mu.find(m => m.matchup_id === mineMu.matchup_id && m.roster_id !== mine.roster_id);
         if (o) {
@@ -518,11 +670,12 @@
         record: (st.wins || 0) + "-" + (st.losses || 0) + (st.ties ? "-" + st.ties : ""),
         pf: r1(num(st.fpts) + num(st.fpts_decimal) / 100),
         lineup, bench, stash, alerts, opponent: oppInfo,
-        proj_rec: r1(sum(rec.filter(Boolean).map(x => ptsOf(P(x), "adj")))),
-        proj_rec_sleeper: r1(sum(rec.filter(Boolean).map(x => ptsOf(P(x), "sleeper")))),
-        proj_cur: r1(sum(cur.filter(x => x && x !== "0").map(x => ptsOf(P(x), "sleeper")))),
+        // an auto-sub counts for its starter wherever that starter is still in the lineup
+        proj_rec: r1(sum(rec.filter(Boolean).map(x => slotPts(x, "adj", recSet)))),
+        proj_rec_sleeper: r1(sum(rec.filter(Boolean).map(x => slotPts(x, "sleeper", recSet)))),
+        proj_cur: r1(sum(cur.filter(x => x && x !== "0").map(x => slotPts(x, "sleeper", curSet)))),
         any_locked: cur.some(x => x && x !== "0" && P(x).locked),
-        live_pts: r1(sum(cur.filter(x => x && x !== "0" && P(x).locked).map(x => P(x).actual || 0))),
+        live_pts: r1(sum(cur.filter(x => x && x !== "0").map(slotLive))),
         scoring: Object.fromEntries(["rec", "pass_td", "bonus_rec_te", "pass_int", "fum_lost"].map(k => [k, ss[k] === undefined ? null : ss[k]])),
       });
     }

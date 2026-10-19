@@ -99,6 +99,8 @@ h1 a:hover{text-decoration:underline;text-decoration-color:var(--accent);text-un
 .who .ln b{color:var(--ink);font-weight:500}
 .who .nt{font-size:12px;color:var(--warn);margin-top:2px}
 .who .rp{font-size:12px;color:var(--accent);margin-top:2px}
+.who .as{font-size:12px;color:var(--call);margin-top:2px}
+.who .as.dim{color:var(--dim)}
 .inj{display:inline-block;font:700 10px/16px var(--body);padding:0 5px;border-radius:4px;margin-left:6px;vertical-align:2px;background:var(--bad);color:#fff}
 .inj.Q{background:var(--warn);color:#1a1405}
 .inj.BYE{background:var(--dim)}
@@ -191,28 +193,51 @@ function row(slot, label, p, opts) {
   opts = opts || {};
   const cls = ["prow"];
   if (opts.changed) cls.push("changed");
-  if (p && !p.available) cls.push("off");
+  if (p && !p.available && !(opts.autosub && opts.autosub.state === "in")) cls.push("off");
   if (!p) {
     return '<div class="' + cls.join(" ") + '"><div class="slot ' + esc(slot) + '">' + esc(label) + '</div>' +
       avatar(null) + '<div class="who"><div class="nm" style="color:var(--bad)">Empty</div></div><div></div></div>';
   }
   const game = p.opp ? ((p.home ? "vs " : "@ ") + p.opp + " " + p.day) : (p.team ? "BYE" : "Free agent");
-  const proj = mode === "rec" ? p.adj : p.sleeper;
-  const played = p.locked && p.actual != null;
+  const key = mode === "rec" ? "adj" : "sleeper";
+  const proj = p[key];
+  let played = p.locked && p.actual != null;
   // once a game starts, the big number is the real score and the projection moves underneath it
-  const val = played ? p.actual : proj;
-  const second = played ? "proj " + proj.toFixed(1)
+  let val = played ? p.actual : proj;
+  let second = played ? "proj " + proj.toFixed(1)
     : (mode === "rec" ? "Sleeper " + p.sleeper.toFixed(1) : (p.adj !== p.sleeper ? "Adj " + p.adj.toFixed(1) : ""));
+  // auto-sub: a bench player whose points count if this starter doesn't play
+  let asLine = "";
+  const a = opts.autosub;
+  if (a) {
+    const b = a.player;
+    const bPlayed = b.locked && b.actual != null;
+    const bVal = bPlayed ? b.actual : b[key];
+    const bTxt = esc(b.name) + " (" + esc(b.pos) + " · " + esc(b.day || "?") + ", " + (bPlayed ? bVal.toFixed(1) + " " + (b.game_state === "live" ? "live" : "final") : bVal.toFixed(1) + " proj") + ")";
+    if (a.state === "in") {
+      played = bPlayed; val = bPlayed ? bVal : a[key];
+      second = bPlayed ? "proj " + a[key].toFixed(1) : "via auto-sub";
+      asLine = '<div class="as">⇄ Auto-sub in: ' + bTxt + ' scores for him</div>';
+    } else if (a.state === "doubtful") {
+      if (!played) { val = a[key]; second = "with auto-sub"; }
+      asLine = '<div class="as">⇄ Auto-sub: ' + bTxt + ' covers him if he sits</div>';
+    } else if (a.state === "unused") {
+      asLine = '<div class="as dim">⇄ Auto-sub ' + esc(b.name) + ' not needed: he played</div>';
+    } else {
+      asLine = '<div class="as">⇄ Auto-sub: ' + bTxt + ' if he sits</div>';
+    }
+  }
+  if (opts.subFor) asLine = '<div class="as">⇄ Auto-sub for ' + esc(opts.subFor) + '</div>';
   const gameTag = p.game_state === "final" ? '<span class="gs final">FINAL</span>' : p.game_state === "live" ? '<span class="gs live">LIVE</span>' : "";
   const avg = p.avg != null ? "avg " + p.avg + " · L3 " + p.last3 : "no games yet";
   return '<div class="' + cls.join(" ") + '">' +
     '<div class="slot ' + esc(slot) + '">' + esc(label) + '</div>' + avatar(p) +
     '<div class="who"><div class="nm">' + esc(p.name) + injTag(p) + '</div>' +
     '<div class="ln"><b>' + esc(p.pos) + ' · ' + esc(p.team || "FA") + '</b>  ' + esc(game) + '  ·  ' + esc(avg) + '</div>' +
-    (opts.replaces ? '<div class="rp">↑ in for ' + esc(opts.replaces) + '</div>' : "") +
+    (opts.replaces ? '<div class="rp">↑ in for ' + esc(opts.replaces) + '</div>' : "") + asLine +
     (p.notes && p.notes.length ? '<div class="nt">' + p.notes.map(esc).join(" · ") + '</div>' : "") +
     '</div>' +
-    '<div class="pts"><div class="big' + (played ? " act" : "") + '">' + gameTag + ((p.available || played) ? val.toFixed(1) : "—") + '</div>' +
+    '<div class="pts"><div class="big' + (played ? " act" : "") + '">' + gameTag + ((p.available || played || (a && a.state === "in")) ? val.toFixed(1) : "—") + '</div>' +
     (second ? '<div class="sm">' + esc(second) + '</div>' : "") + (played ? "" : muChip(p)) + '</div>' +
     '</div>';
 }
@@ -289,12 +314,20 @@ function render() {
   }
   h += '<div class="sect"><span>Starters</span><span>' + (mode === "cur" ? "Sleeper proj" : mode === "rec" ? "Adj proj" : "Sleeper proj") + '</span></div><div class="card">';
   const shown = new Set();
+  L.lineup.forEach(s => { const p = mode === "rec" ? s.rec : mode === "sleeper" ? s.sleeper : s.cur; if (p) shown.add(p.id); });
+  // auto-subs set in Sleeper, by starter; they count wherever the starter is still in the lineup
+  const subOf = {}, subFor = {};
+  L.lineup.forEach(s => {
+    if (s.autosub && s.cur && shown.has(s.cur.id) && !shown.has(s.autosub.player.id)) {
+      subOf[s.cur.id] = s.autosub; subFor[s.autosub.player.id] = s.cur.name;
+    }
+  });
   L.lineup.forEach(s => {
     const p = mode === "rec" ? s.rec : mode === "sleeper" ? s.sleeper : s.cur;
-    if (p) shown.add(p.id);
     const changed = mode !== "cur" && p && (!s.cur || s.cur.id !== p.id);
     const curInLineup = s.cur && L.lineup.some(x => (mode === "rec" ? x.rec : x.sleeper) && (mode === "rec" ? x.rec : x.sleeper).id === s.cur.id);
-    h += row(s.slot, s.label, p, {changed: changed && !curInLineup, replaces: changed && !curInLineup && s.cur ? s.cur.name : (changed && !s.cur ? "empty slot" : "")});
+    h += row(s.slot, s.label, p, {changed: changed && !curInLineup, replaces: changed && !curInLineup && s.cur ? s.cur.name : (changed && !s.cur ? "empty slot" : ""),
+      autosub: p && subOf[p.id]});
   });
   h += '</div>';
   const pool = {};
@@ -303,15 +336,17 @@ function render() {
   const bench = Object.values(pool).filter(p => !shown.has(p.id) && !p.reserve && !p.taxi)
     .sort((a, b) => (b.available - a.available) || (b.adj - a.adj));
   h += '<div class="sect"><span>Bench</span><span>' + bench.length + '</span></div><div class="card">' +
-    (bench.length ? bench.map(p => row("BN", "BN", p)).join("") : '<div class="prow"><div></div><div></div><div class="who"><div class="ln">Empty</div></div><div></div></div>') + '</div>';
+    (bench.length ? bench.map(p => row("BN", "BN", p, {subFor: subFor[p.id]})).join("") : '<div class="prow"><div></div><div></div><div class="who"><div class="ln">Empty</div></div><div></div></div>') + '</div>';
   if (L.stash.length) {
     h += '<div class="sect"><span>IR / Taxi</span><span>' + L.stash.length + '</span></div><div class="card">' +
       L.stash.map(p => row("BN", p.reserve ? "IR" : "TX", p)).join("") + '</div>';
   }
   h += '<p class="legend">Big number = projected points with this league\'s scoring. "Adj" moves Sleeper\'s projection ' +
     (DATA.matchup_weight * 100).toFixed(0) + '% of the way toward what the opposing defense usually gives up to that position. ' +
+    'Smash spots (the 3 easiest defenses vs a position) get an extra boost on top, and players who\'ve handled tough defenses better than most get part of a tough-matchup penalty waived; the player notes say when. ' +
     'Matchup tag: <span class="mu tough">red = top-8 toughest</span> <span class="mu easy">green = top-8 easiest</span>. ' +
-    'Orange rows are changes from your current Sleeper lineup. <span style="color:var(--good)">Green numbers</span> are real points from games already played (FINAL) or in progress (LIVE), with the projection underneath. Those players are locked, so they\'re never moved.</p>';
+    'Orange rows are changes from your current Sleeper lineup. <span style="color:var(--good)">Green numbers</span> are real points from games already played (FINAL) or in progress (LIVE), with the projection underneath. Those players are locked, so they\'re never moved. ' +
+    '<span style="color:var(--call)">⇄ Auto-sub</span> lines show the bench player you picked in Sleeper to cover a starter: if the starter doesn\'t play, the sub\'s points count, and the totals include that.</p>';
   $("#panel").innerHTML = h;
   document.querySelectorAll(".seg button").forEach(b => b.onclick = () => { mode = b.dataset.m; store.set("mode", mode); render(); });
   $("#foot").textContent = "Read-only: Sleeper's API can't change lineups, so make swaps in the app" +

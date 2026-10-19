@@ -289,6 +289,77 @@ def matchup_text(pos, row):
 
 
 # ---------------------------------------------------------------------------
+# Matchup extras: the very easiest defenses, and players who hold up against tough ones
+
+SKILL_POS = ("QB", "RB", "WR", "TE")
+
+
+def easy_bonus(row, boost=0.30, ranks=3, shrink_games=4):
+    """Extra projection share for a smash spot. The matchup multiplier only moves a projection part
+    of the way, and players facing a bottom defense tend to beat even that, so the `ranks` easiest
+    defenses vs a position add up to `boost` more (the 1st-easiest the most, then less for each
+    rank up), scaled down when that defense's numbers rest on only a few games."""
+    if not row or not boost or ranks < 1:
+        return 0.0
+    easiest = row["of"] - row["rank"] + 1
+    if easiest > ranks:
+        return 0.0
+    sample = row["games"] / float(row["games"] + shrink_games)
+    return round(boost * (ranks - easiest + 1) / ranks * sample, 3)
+
+
+def tough_profile(log_sets, meta, min_games=2, shrink_games=4):
+    """{pid: row} for skill players who score about as well against the toughest third of
+    defenses as against the rest. log_sets: build_player_logs() logs for one or more seasons
+    (each season's toughness ranks come from that season). row["hold"] (0 to 1) is how much of a
+    tough-matchup penalty to waive: 1 = he's done at least as well against tough defenses as
+    against everyone else, 0 = he drops off as much as a typical player at his position (or
+    more), and small samples are pulled toward 0."""
+    split = {}  # pid -> (pos, [pts vs tough], [pts vs the rest])
+    for pid in set().union(*log_sets):
+        pos = player_pos(meta.get(pid))
+        if pos not in SKILL_POS:
+            continue
+        tough, other = [], []
+        for logs in log_sets:
+            for e in logs.get(pid, []):
+                if e["opp_rank"]:
+                    (tough if e["opp_rank"] <= e["opp_of"] / 3.0 else other).append(e["pts_half"])
+        if tough and other:
+            split[pid] = (pos, tough, other)
+
+    # how much a typical fantasy-relevant player drops off against tough defenses, by position
+    base = {}
+    for pos in SKILL_POS:
+        t = [x for p, tl, ol in split.values() if p == pos and sum(tl + ol) / len(tl + ol) >= 8 for x in tl]
+        o = [x for p, tl, ol in split.values() if p == pos and sum(tl + ol) / len(tl + ol) >= 8 for x in ol]
+        typical = (sum(t) / len(t)) / (sum(o) / len(o)) if t and o and sum(o) else 0.8
+        base[pos] = min(max(typical, 0.5), 0.95)
+
+    out = {}
+    for pid, (pos, tough, other) in split.items():
+        if len(tough) < min_games or len(other) < min_games:
+            continue
+        at, ao = sum(tough) / len(tough), sum(other) / len(other)
+        if ao < 5:  # a few points a game is too noisy to read anything into
+            continue
+        lift = min(max((at / ao - base[pos]) / (1 - base[pos]), 0.0), 1.0)
+        hold = round(lift * len(tough) / float(len(tough) + shrink_games), 3)
+        if hold > 0:
+            out[pid] = {"hold": hold, "avg_tough": round(at, 1), "avg_other": round(ao, 1),
+                        "g_tough": len(tough), "g_other": len(other)}
+    return out
+
+
+def matchup_mult(row, hold=0.0):
+    """The defense multiplier, with a tough-matchup penalty partly waived for players who hold up."""
+    mult = row["mult"] if row else 1.0
+    if mult < 1 and hold:
+        mult = round(1 - (1 - mult) * (1 - hold), 3)
+    return mult
+
+
+# ---------------------------------------------------------------------------
 # Team context: injured defensive starters and offensive starters
 
 def team_injuries(players):
@@ -391,6 +462,70 @@ def summarize_player(log, pos):
     if pos in ("WR", "TE", "RB") and g:
         out["tgt_pg"] = round(tot.get("rec_tgt", 0) / g, 1)
     return out
+
+
+# ---------------------------------------------------------------------------
+# Auto-subs: in Sleeper you can pick a bench player from an earlier game to cover a starter
+# (a Questionable Monday night player, say). If the starter doesn't play, the auto-sub's
+# points count for him.
+
+# Where Sleeper's API keeps a team's auto-subs. Not documented: tools/autosub_probe.py
+# prints what a real roster and matchup carry, and this is the one place to adjust.
+AUTO_SUB_KEYS = ("auto_subs", "autosubs", "auto_sub", "subs")
+_STARTER_KEYS = ("starter", "starter_id", "player_id", "original", "from")
+_SUB_KEYS = ("sub", "sub_id", "auto_sub", "substitute", "to")
+
+
+def auto_subs(*objs):
+    """{starter id: auto-sub id} from the first roster or matchup object (or its metadata /
+    settings) that has any. Takes a {starter: sub} map or a list of {starter, sub} pairs."""
+    for o in objs:
+        for where in (o or {}, (o or {}).get("metadata") or {}, (o or {}).get("settings") or {}):
+            if not isinstance(where, dict):
+                continue
+            for k in AUTO_SUB_KEYS:
+                v = where.get(k)
+                out = {}
+                if isinstance(v, dict):
+                    out = {str(a): str(b) for a, b in v.items() if a and b and str(b) != "0"}
+                elif isinstance(v, list):
+                    for e in v:
+                        if isinstance(e, dict):
+                            a = next((e[x] for x in _STARTER_KEYS if e.get(x)), None)
+                            b = next((e[x] for x in _SUB_KEYS if e.get(x)), None)
+                        elif isinstance(e, (list, tuple)) and len(e) == 2:
+                            a, b = e
+                        else:
+                            continue
+                        if a and b and str(b) != "0":
+                            out[str(a)] = str(b)
+                if out:
+                    return out
+    return {}
+
+
+def sub_state(s):
+    """Where a starter's auto-sub stands: 'in' (he isn't playing, so the sub's points count),
+    'doubtful' (probably sits), 'backup' (expected to play) or 'unused' (his game started
+    and he played)."""
+    if s["locked"]:
+        return "in" if (not s["available"] or (s["game_state"] == "final" and not s["played"])) else "unused"
+    if not s["available"]:
+        return "in"
+    return "doubtful" if s["status"] == "Doubtful" else "backup"
+
+
+def sub_can_score(b):
+    """Can auto-sub b still put up points: healthy before his game, or on the field once it starts?"""
+    return (b["played"] or b["game_state"] == "live") if b["locked"] else b["available"]
+
+
+def sub_options(slot, s, bench):
+    """Bench players who could be an auto-sub for starter s in slot: eligible there, healthy,
+    and playing on an earlier day so their game finishes first. Best first."""
+    elig = SLOT_ELIG.get(slot) or set()
+    return [b for b in bench if b["available"] and not b["locked"] and b["date"] and s["date"]
+            and b["date"] < s["date"] and elig.intersection(b.get("fpos") or [b["pos"]])]
 
 
 # ---------------------------------------------------------------------------

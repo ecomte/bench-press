@@ -99,6 +99,11 @@ def main():
 
     cfg = load_config()
     W = float(cfg.get("matchup_weight", 0.5))
+    # smash spots: the easiest few defenses vs a position add up to this much on top of the matchup
+    EASY = float(cfg.get("easy_matchup_boost", 0.30))
+    EASY_RANKS = int(cfg.get("easy_matchup_ranks", 3))
+    SMASH_GAP = float(cfg.get("smash_alert_gap", 3.0))  # flag a benched smash spot this close to a starter
+    HISTORY = int(cfg.get("history_seasons", 1))  # past seasons used to spot players who beat tough defenses
     nick = cfg.get("league_nicknames", {}) if not (args.user and args.user.lstrip("@").lower() != cfg["username"].lower()) else {}
     now = dt.datetime.now()
 
@@ -159,6 +164,26 @@ def main():
 
     dvp = A.defense_vs_position(weekly)
     logs, meta = A.build_player_logs(weekly, dvp)
+    for pos in A.SKILL_POS:
+        for row in dvp.get(pos, {}).values():
+            row["easy"] = A.easy_bonus(row, EASY, EASY_RANKS)
+
+    # Past seasons (finished, so cached for good) give players enough games against tough defenses
+    # to tell who holds up against them. Each season's toughness ranks come from that season.
+    log_sets = [logs]
+    for back in range(1, HISTORY + 1):
+        past = {}
+        for w in range(1, 19):
+            try:
+                rows = S.week_stats(str(int(season) - back), w, final=True)
+            except Exception:
+                break
+            if rows:
+                past[w] = rows
+        if past:
+            log_sets.append(A.build_player_logs(past, A.defense_vs_position(past))[0])
+            print("History: %s season, %d weeks" % (int(season) - back, len(past)))
+    tough = A.tough_profile(log_sets, {pid: players.get(pid) or meta.get(pid) for pid in set().union(*log_sets)})
     inj = A.team_injuries(players)
     byes_now = sched.byes(week)
 
@@ -228,8 +253,10 @@ def main():
                 sleeper_pts = sum(past) / len(past) if past else 0.0
             opp = game["opp"] if game else None
             row = dvp.get(pos, {}).get(opp) if opp else None
-            mult = row["mult"] if row else 1.0
-            adj = sleeper_pts * (1 + W * (mult - 1))
+            tp = tough.get(pid) if pos in A.SKILL_POS else None
+            mult = A.matchup_mult(row, tp["hold"] if tp else 0)
+            easy = row.get("easy", 0) if row else 0
+            adj = sleeper_pts * (1 + W * (mult - 1) + easy)
             why = ""
             if not team:
                 why = "Free agent / no team"
@@ -249,6 +276,11 @@ def main():
                 for x in inj.get(team, {}).get("off", []):
                     if x["pos"] == "QB" and x["status"] in ("Out", "IR", "Doubtful", "PUP", "Sus"):
                         notes.append("His QB %s is %s" % (x["name"], x["status"]))
+            if easy and sleeper_pts:
+                notes.append("Smash spot: %s, projection boosted %+d%%" % (A.matchup_text(pos, row), round(100 * (W * (mult - 1) + easy))))
+            if tp and row and row["mult"] < 1:
+                notes.append("Handles tough Ds better than most %ss: %.1f a game vs top-third defenses (%d games), %.1f otherwise" % (
+                    pos, tp["avg_tough"], tp["g_tough"], tp["avg_other"]))
             return {
                 "id": pid, "name": A.player_name(pid, pl) if pos != "DEF" else (pl.get("first_name", pid) + " " + pl.get("last_name", "")).strip(),
                 "pos": pos, "fpos": A.player_fpos(pl, pos), "team": team, "status": status,
@@ -256,13 +288,17 @@ def main():
                 "date": game["date"] if game else None,
                 "sleeper": round(sleeper_pts * factor, 2), "adj": round(adj * factor, 2),
                 "raw_sleeper": round(sleeper_pts, 2),
-                "mult": mult, "rank": row["rank"] if row else None, "of": row["of"] if row else None,
+                "mult": mult, "easy": easy, "hold": tp["hold"] if tp else 0,
+                "rank": row["rank"] if row else None, "of": row["of"] if row else None,
                 "matchup": A.matchup_text(pos, row), "available": why == "",
                 "why": why, "notes": notes,
                 "gp": len(pts), "avg": round(sum(pts) / len(pts), 1) if pts else None,
                 "last3": round(sum(pts[-3:]) / len(pts[-3:]), 1) if pts else None,
                 "reserve": pid in reserve, "taxi": pid in taxi,
                 "locked": locked, "game_state": gstate, "actual": actual,
+                # took the field this week (Sleeper marks game-day actives with gms_active)
+                "played": locked and (A.played({"stats": live_stats.get(pid) or {}, "player_id": pid})
+                                      or A.num((live_stats.get(pid) or {}).get("gms_active")) > 0),
                 "left": A.game_left(game, gstate, now_et),
             }
 
@@ -284,26 +320,83 @@ def main():
                 return None
             return pool.get(pid) or info(pid)
 
+        rec_set = set(x for x in rec if x)
+        cur_set = set(x for x in cur if x and x != "0")
+
+        # ---- auto-subs: {starter: bench player whose points count if the starter doesn't play} ----
+        mu = S.matchups(lid, week)
+        mine_mu = next((m for m in mu if m.get("roster_id") == mine["roster_id"]), None)
+        subs = {a: b for a, b in A.auto_subs(mine_mu, mine).items() if a in cur_set and b in pool and b not in cur_set}
+
+        def pts(p, key):  # projected final: real points so far plus the projection for what's left of the game
+            return (p["actual"] or 0) + p[key] * p["left"] if p["locked"] else p[key]
+
+        def slot_pts(x, key, ids):
+            """A starter's projected points, counting his auto-sub when the sub isn't also starting."""
+            b = subs.get(x)
+            if not b or b in ids:
+                return pts(P(x), key)
+            p, q = P(x), P(b)
+            st = A.sub_state(p)
+            sub = pts(q, key) if A.sub_can_score(q) else 0.0
+            if st == "in":
+                return sub
+            if st == "doubtful":  # a Doubtful starter counts 25% of his projection; the sub covers the rest
+                return pts(p, key) + 0.75 * sub
+            return pts(p, key)
+
+        def slot_live(x):
+            """Real points so far in a starter's slot (his auto-sub's, once it's clear he isn't playing)."""
+            p, b = P(x), subs.get(x)
+            if b and A.sub_state(p) == "in":
+                return (P(b)["actual"] or 0) if P(b)["locked"] else 0.0
+            return (p["actual"] or 0) if p["locked"] else 0.0
+
         lineup = []
         for i, s in enumerate(slots):
             r_id = rec[i] if A.SLOT_ELIG.get(s) else (cur[i] if cur[i] != "0" else None)
-            lineup.append({"slot": s, "label": A.SLOT_LABEL.get(s, s), "rec": P(r_id), "cur": P(cur[i]),
-                           "sleeper": P(rec_sleeper[i])})
-        rec_set = set(x for x in rec if x)
-        cur_set = set(x for x in cur if x and x != "0")
+            entry = {"slot": s, "label": A.SLOT_LABEL.get(s, s), "rec": P(r_id), "cur": P(cur[i]),
+                     "sleeper": P(rec_sleeper[i])}
+            if cur[i] in subs:
+                entry["autosub"] = {"player": P(subs[cur[i]]), "state": A.sub_state(P(cur[i])),
+                                    "adj": round(slot_pts(cur[i], "adj", ()), 2),
+                                    "sleeper": round(slot_pts(cur[i], "sleeper", ()), 2)}
+            lineup.append(entry)
         bench = sorted([p for pid, p in pool.items() if pid not in rec_set and not p["reserve"] and not p["taxi"]],
                        key=lambda p: (-p["adj"], p["name"]))
         stash = sorted([p for p in pool.values() if p["reserve"] or p["taxi"]], key=lambda p: p["name"])
 
         # ---- alerts -------------------------------------------------------------------
         alerts = []
-        def pts(p, key):  # projected final: real points so far plus the projection for what's left of the game
-            return (p["actual"] or 0) + p[key] * p["left"] if p["locked"] else p[key]
-
         for i, s in enumerate(slots):
             c = P(cur[i])
             if c is not None and c["locked"]:
                 continue  # game already started, nothing to do
+            b = P(subs.get(cur[i]))
+            if b is not None:
+                # this starter has an auto-sub: say who covers him, and flag a sub that can't
+                lbl = A.SLOT_LABEL.get(s, s)
+                ok = A.sub_can_score(b)
+                if not ok:
+                    alerts.append({"level": "bad", "text": "%s's auto-sub %s %s. Pick a different auto-sub." % (
+                        c["name"], b["name"], "didn't play" if b["locked"] else "is " + (b["why"] if b["why"] != "BYE" else "on a bye"))})
+                elif not b["locked"] and b["date"] and c["date"] and b["date"] > c["date"]:
+                    alerts.append({"level": "bad", "text": "%s's auto-sub %s plays after him (%s vs %s), so the sub can't kick in." % (
+                        c["name"], b["name"], b["day"], c["day"])})
+                elif not c["available"]:
+                    alerts.append({"level": "warn", "text": "%s is %s at %s; his auto-sub %s scores for him (%.1f)." % (
+                        c["name"], c["why"] if c["why"] != "BYE" else "on a bye", lbl, b["name"], pts(b, "sleeper"))})
+                    continue
+                elif c["status"] == "Doubtful":
+                    alerts.append({"level": "warn", "text": "%s is Doubtful (%s game); auto-sub %s (%s) covers him if he sits." % (
+                        c["name"], c["day"] or "?", b["name"], b["day"] or "?")})
+                    continue
+                if ok and c["available"]:
+                    alerts.append({"level": "info", "text": "Auto-sub set: %s (%s, %.1f) covers %s (%s)%s." % (
+                        b["name"], b["day"] or "?", pts(b, "sleeper"), c["name"], c["day"] or "?",
+                        " if he's ruled out" if c["status"] == "Questionable" else "")})
+                if c["status"] == "Questionable" and ok:
+                    continue  # covered: no need to watch the inactives
             if c is None:
                 alerts.append({"level": "bad", "text": "Empty %s slot in your Sleeper lineup." % A.SLOT_LABEL.get(s, s)})
             elif not c["available"]:
@@ -311,13 +404,18 @@ def main():
             elif c["status"] == "Doubtful":
                 alerts.append({"level": "bad", "text": "%s is Doubtful and in your lineup." % c["name"]})
             elif c["status"] == "Questionable":
-                alerts.append({"level": "warn", "text": "%s is Questionable (%s game). Check the inactives before kickoff." % (c["name"], c["day"] or "?")})
+                opts = [] if b is not None else A.sub_options(s, c, [p for p in bench if p["id"] not in cur_set])
+                alerts.append({"level": "warn", "text": "%s is Questionable (%s game). Check the inactives before kickoff%s." % (
+                    c["name"], c["day"] or "?",
+                    ", or set an auto-sub: %s (%s, %.1f) plays earlier" % (opts[0]["name"], opts[0]["day"], opts[0]["sleeper"]) if opts else "")})
             elif c["raw_sleeper"] == 0 and c["pos"] != "DEF":
                 alerts.append({"level": "warn", "text": "%s is starting with a 0.0 Sleeper projection." % c["name"]})
         ins = [P(x) for x in rec if x and x not in cur_set]
         outs = [P(x) for x in cur if x and x != "0" and x not in rec_set]
         if ins or outs:
-            gain = sum(p["adj"] for p in ins) - sum(p["adj"] for p in outs if p["available"])
+            # a benched starter with an auto-sub was worth his sub's points, not nothing
+            gain = sum(p["adj"] for p in ins) - sum(slot_pts(p["id"], "adj", cur_set) if p["id"] in subs else p["adj"]
+                                                    for p in outs if p["available"] or p["id"] in subs)
             alerts.append({"level": "change", "text": "Lineup change: start %s; sit %s (about %+.1f pts)." % (
                 ", ".join("%s (%.1f)" % (p["name"], p["adj"]) for p in ins) or "-",
                 ", ".join("%s (%s)" % (p["name"], ("%.1f" % p["adj"]) if p["available"] else p["why"]) for p in outs) or "-", gain)})
@@ -327,12 +425,27 @@ def main():
             alerts.append({"level": "call", "text": "Matchup call: Sleeper's projections alone would start %s; the matchup data prefers %s. Close one, your call." % (
                 ", ".join("%s (%.1f, %s)" % (P(x)["name"], P(x)["sleeper"], P(x)["matchup"] or "no data") for x in s_only),
                 ", ".join("%s (%.1f, %s)" % (P(x)["name"], P(x)["sleeper"], P(x)["matchup"] or "no data") for x in a_only))})
+        # smash spots on the bench that came close: worth a look even with a lower number
+        for p in bench:
+            if not p["easy"] or not p["available"] or p["locked"]:
+                continue
+            spots = [(i, P(rec[i])) for i, s in enumerate(slots) if rec[i] and not P(rec[i])["locked"]
+                     and (A.SLOT_ELIG.get(s) or set()).intersection(p.get("fpos") or [p["pos"]])]
+            if not spots:
+                continue
+            i, q = min(spots, key=lambda t: (t[1]["adj"], t[0]))
+            if q["adj"] - p["adj"] <= SMASH_GAP:
+                alerts.append({"level": "call", "text": "Smash spot: %s (%.1f) faces %s, the %s. Worth a look over %s (%.1f) at %s." % (
+                    p["name"], p["adj"], p["opp"], p["matchup"], q["name"], q["adj"], A.SLOT_LABEL.get(slots[i], slots[i]))})
         for x in rec:
             p = P(x)
             if p and p["locked"]:
                 continue
             if p and p["rank"] and p["rank"] <= 3 and p["pos"] != "DEF":
-                alerts.append({"level": "info", "text": "%s faces %s (%s)." % (p["name"], p["opp"], p["matchup"])})
+                tp = tough.get(p["id"]) if p["hold"] else None
+                alerts.append({"level": "info", "text": "%s faces %s (%s).%s" % (p["name"], p["opp"], p["matchup"], (
+                    " He's handled tough defenses better than most (%.1f a game vs the top third, %.1f otherwise), so the matchup counts against him less."
+                    % (tp["avg_tough"], tp["avg_other"])) if tp else "")})
             if p and any(n.startswith("His QB") for n in p["notes"]):
                 alerts.append({"level": "warn", "text": "%s: %s" % (p["name"], [n for n in p["notes"] if n.startswith("His QB")][0])})
         early = [P(x) for x in rec if x and not P(x)["locked"] and P(x)["day"] in ("Thu", "Fri", "Wed")]
@@ -342,6 +455,10 @@ def main():
                 "%s %.1f%s" % (p["name"], p["actual"] or 0, " live" if p["game_state"] == "live" else "") for p in done)})
         if early:
             alerts.append({"level": "info", "text": "Plays before Sunday (lock early): " + ", ".join("%s (%s)" % (p["name"], p["day"]) for p in early)})
+        for a, b in subs.items():
+            if b in rec_set and not P(b)["locked"]:
+                alerts.append({"level": "info", "text": "The recommendation starts %s, your auto-sub for %s. Pick a new auto-sub after the swap." % (
+                    P(b)["name"], P(a)["name"])})
         ir_slots = int((lg.get("settings") or {}).get("reserve_slots") or 0)
         if ir_slots and len(reserve) < ir_slots:
             can_ir = [p for p in bench if p["status"] in ("IR", "Out", "PUP", "Doubtful", "Sus")]
@@ -354,8 +471,6 @@ def main():
 
         # ---- fantasy opponent ---------------------------------------------------------
         opp_info = None
-        mu = S.matchups(lid, week)
-        mine_mu = next((m for m in mu if m.get("roster_id") == mine["roster_id"]), None)
         if mine_mu and mine_mu.get("matchup_id") is not None:
             o = next((m for m in mu if m.get("matchup_id") == mine_mu["matchup_id"] and m.get("roster_id") != mine["roster_id"]), None)
             if o:
@@ -393,12 +508,13 @@ def main():
             "record": "%d-%d%s" % (st.get("wins", 0), st.get("losses", 0), ("-%d" % st["ties"]) if st.get("ties") else ""),
             "pf": round(num(st.get("fpts")) + num(st.get("fpts_decimal")) / 100, 1),
             "lineup": lineup, "bench": bench, "stash": stash, "alerts": alerts, "opponent": opp_info,
-            "proj_rec": round(sum(pts(P(x), "adj") for x in rec if x), 1),
-            "proj_rec_sleeper": round(sum(pts(P(x), "sleeper") for x in rec if x), 1),
-            "proj_cur": round(sum(pts(P(x), "sleeper") for x in cur if x and x != "0"), 1),
+            # an auto-sub counts for its starter wherever that starter is still in the lineup
+            "proj_rec": round(sum(slot_pts(x, "adj", rec_set) for x in rec if x), 1),
+            "proj_rec_sleeper": round(sum(slot_pts(x, "sleeper", rec_set) for x in rec if x), 1),
+            "proj_cur": round(sum(slot_pts(x, "sleeper", cur_set) for x in cur if x and x != "0"), 1),
             "any_locked": any(P(x)["locked"] for x in cur if x and x != "0"),
             # real points so far; locked starters are the same in every lineup view
-            "live_pts": round(sum(P(x)["actual"] or 0 for x in cur if x and x != "0" and P(x)["locked"]), 1),
+            "live_pts": round(sum(slot_live(x) for x in cur if x and x != "0"), 1),
             "scoring": {k: ss.get(k) for k in ("rec", "pass_td", "bonus_rec_te", "pass_int", "fum_lost")},
         })
 
@@ -441,7 +557,9 @@ def main():
         game = sched.game(week, team) if team else None
         opp = game["opp"] if game else None
         row = dvp.get(pos, {}).get(opp) if opp else None
-        mult = row["mult"] if row else 1.0
+        tp = tough.get(pid) if pos in A.SKILL_POS else None
+        mult = A.matchup_mult(row, tp["hold"] if tp else 0)
+        easy = row.get("easy", 0) if row else 0
         pj = proj_idp.get(pid, 0) if pos in A.IDP_POS else proj_half.get(pid, 0)
         base = {
             "player": A.player_name(pid, pl), "pos": pos, "team": team,
@@ -455,8 +573,10 @@ def main():
             "opp_toughness_rank": row["rank"] if row else "",
             "opp_matchup": A.matchup_text(pos, row),
             "opp_multiplier": mult if row else "",
+            "smash_boost": easy or "",
+            "tough_d_hold": tp["hold"] if tp else "",
             "sleeper_proj_half": round(pj, 2),
-            "matchup_adj_proj_half": round(pj * (1 + W * (mult - 1)), 2),
+            "matchup_adj_proj_half": round(pj * (1 + W * (mult - 1) + easy), 2),
             "player_id": pid,
         })
         if pos == "DEF":
@@ -472,7 +592,7 @@ def main():
         sheet_rows[sheet_of[pos]].append(base)
 
     head = ["player", "pos", "team", "rostered_by", "injury", "bye_week", "next_opp", "next_game_day",
-            "opp_toughness_rank", "opp_matchup", "opp_multiplier", "sleeper_proj_half", "matchup_adj_proj_half",
+            "opp_toughness_rank", "opp_matchup", "opp_multiplier", "smash_boost", "tough_d_hold", "sleeper_proj_half", "matchup_adj_proj_half",
             "gp", "avg_half_ppr", "avg_ppr", "last3_avg_half", "best", "worst",
             "avg_vs_top10_def", "games_vs_top10_def", "avg_vs_other_def", "snap_pct"]
     statcols = {
@@ -547,7 +667,8 @@ def main():
                        "current": c["name"] if c else "(empty)", "current_sleeper_proj": c["sleeper"] if c else "",
                        "rec_game": (r["game_state"] or "") if r else "",
                        "rec_actual": r["actual"] if (r and r["actual"] is not None) else "",
-                       "change": "SWAP" if (r and c and r["id"] != c["id"]) or (r and not c) else ""})
+                       "change": "SWAP" if (r and c and r["id"] != c["id"]) or (r and not c) else "",
+                       "auto_sub": s["autosub"]["player"]["name"] if s.get("autosub") else ""})
     write_csv(os.path.join(USER_SHEETS, "lineups.csv"), lu)
 
     # tidy up sheets from the old layout (per-person copies of the shared sheets)
@@ -595,7 +716,7 @@ def main():
         import sitedata
         scoring_keys = set(k for lg in leagues for k, v in (lg.get("scoring_settings") or {}).items() if v)
         sitedata.write(args.site, cfg, season, week, W, players, sched_raw, proj_list, live_list,
-                       sorted(weekly), dvp, logs, inj, scoring_keys)
+                       sorted(weekly), dvp, logs, inj, scoring_keys, tough)
         print("Site:    %s" % os.path.join(site_dir, "index.html"))
     else:
         print("Player photos for the phone page...")

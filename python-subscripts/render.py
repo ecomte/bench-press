@@ -24,7 +24,9 @@ def report_md(d, dvp):
     L.append("")
     L.append("**How to read this:** *Sleeper* is Sleeper's projection scored with that league's rules. "
              "*Adj* nudges it by the opponent's points allowed to that position (matchup weight %.2f; "
-             "1.0 would apply the full defense effect). Toughness rank 1 = defense that allows the fewest points." % d["matchup_weight"])
+             "1.0 would apply the full defense effect). Toughness rank 1 = defense that allows the fewest points. "
+             "*Smash spots* (the easiest few defenses vs a position) get an extra boost, and players who've handled "
+             "tough defenses better than most at their position get part of a tough-matchup penalty waived." % d["matchup_weight"])
     L.append("")
     for lg in d["leagues"]:
         L.append("## %s" % lg["name"])
@@ -52,6 +54,13 @@ def report_md(d, dvp):
                 (("%s %.1f" % ("FINAL" if r["game_state"] == "final" else "LIVE", r["actual"] or 0)) if r["locked"] else ("%.1f" % r["adj"])) if r else "",
                 ("%.1f" % r["sleeper"]) if r else "",
                 r["avg"] if r and r["avg"] is not None else "-", "same" if same else "**" + _p(c) + "**"))
+        subs = [s for s in lg["lineup"] if s.get("autosub")]
+        if subs:
+            L.append("")
+            L.append("Auto-subs: " + "; ".join("%s covers %s (%s)" % (
+                s["autosub"]["player"]["name"], s["cur"]["name"],
+                {"in": "his points count", "doubtful": "starter Doubtful", "unused": "not needed",
+                 "backup": "backup"}[s["autosub"]["state"]]) for s in subs))
         L.append("")
         L.append("Bench: " + "; ".join("%s %.1f%s" % (p["name"], p["adj"], (" [%s]" % p["why"]) if p["why"] else "") for p in lg["bench"]))
         if lg["stash"]:
@@ -216,18 +225,38 @@ document.getElementById("find").onsubmit = async (e) => {
     return;
   }
   if (hit) { box.innerHTML = card(user, leagues, encodeURIComponent(hit.tag) + "/", hit.name); return; }
-  box.innerHTML = card(user, leagues, "live/?u=" + encodeURIComponent(q), q)
+  // Sleeper usernames ignore case, so Natibuck and natibuck are one person: use one spelling for
+  // the link and the alert no matter how it was typed.
+  const uname = String((user && user.username) || q).toLowerCase();
+  box.innerHTML = card(user, leagues, "live/?u=" + encodeURIComponent(uname), q)
     + '<p class="msg" style="margin-top:10px">No saved page yet, so this one builds live from Sleeper.</p>';
-  box.querySelector(".btn").addEventListener("click", () => notifyOwner(q, leagues));
+  let told = false;  // checked now, since the click navigates away before a lookup could finish
+  alreadyNotified(uname).then(t => { told = t; });
+  box.querySelector(".btn").addEventListener("click", () => { if (!told) notifyOwner(uname, leagues); });
 };
-// The first time this device opens a live page for a name with no saved page, tell the owner's
-// phone through the free ntfy app. It's fire-and-forget, so the visitor sees no difference.
+const NOTE = "New Bench Press user: ";
+// Has the owner already been told about this name from any device? ntfy.sh keeps a topic's recent
+// messages (about 12 hours), so this catches the owner looking a new user up on their own phone.
+async function alreadyNotified(name) {
+  if (!NTFY) return true;
+  try {
+    const r = await fetch("https://ntfy.sh/" + encodeURIComponent(NTFY) + "/json?poll=1&since=all");
+    if (!r.ok) return false;
+    const want = (NOTE + name).toLowerCase();
+    return (await r.text()).split("\\n").some(line => {
+      try { const m = String(JSON.parse(line).message || "").toLowerCase(); return m === want || m.startsWith(want + " "); }
+      catch (e) { return false; }
+    });
+  } catch (e) { return false; }
+}
+// The first time a live page opens for a name with no saved page, tell the owner's phone through
+// the free ntfy app. It's fire-and-forget, so the visitor sees no difference.
 function notifyOwner(name, leagues) {
   if (!NTFY) return;
   const key = "benchpress.notified." + name.toLowerCase();
   try { if (localStorage.getItem(key)) return; localStorage.setItem(key, "1"); } catch (e) {}
   const n = leagues ? leagues.length : null;
-  const msg = "New Bench Press user: " + name + (n === null ? "" : " (" + n + " league" + (n === 1 ? "" : "s") + ")");
+  const msg = NOTE + name + (n === null ? "" : " (" + n + " league" + (n === 1 ? "" : "s") + ")");
   const url = "https://ntfy.sh/" + encodeURIComponent(NTFY) + "?title=" + encodeURIComponent("Bench Press") + "&tags=football";
   try { navigator.sendBeacon(url, msg); } catch (e) {}
 }
