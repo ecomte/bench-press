@@ -448,7 +448,7 @@
           notes.push("W Feast: " + matchupText(pos, row) + ", projection boosted " + (pct >= 0 ? "+" : "") + pct + "%");
         }
         if (tp && row && row.mult < 1) {
-          notes.push("Handles tough Ds better than most " + pos + "s: " + f1(tp.avg_tough) + " a game vs top-third defenses (" + tp.g_tough + " games), " + f1(tp.avg_other) + " otherwise");
+          notes.push("Handles tough Ds better than most " + pos + "s");
         }
         const last3 = pts.slice(-3);
         return {
@@ -603,8 +603,7 @@
         if (p && p.locked) continue;
         if (p && p.rank && p.rank <= 3 && p.pos !== "DEF") {
           const tp = p.hold ? tough[p.id] : null;
-          alerts.push({ level: "info", text: p.name + " faces " + p.opp + " (" + p.matchup + ")." + (tp ? " He's handled tough defenses better than most (" +
-            f1(tp.avg_tough) + " a game vs the top third, " + f1(tp.avg_other) + " otherwise), so the matchup counts against him less." : "") });
+          alerts.push({ level: "info", text: p.name + " faces " + p.opp + " (" + p.matchup + ")." + (tp ? " He handles tough defenses better than most, so the matchup counts against him less." : "") });
         }
         if (p) {
           const qb = p.notes.find(n => n.startsWith("His QB"));
@@ -698,6 +697,8 @@
         any_locked: cur.some(x => x && x !== "0" && P(x).locked),
         live_pts: r1(sum(cur.filter(x => x && x !== "0").map(slotLive))),
         scoring: Object.fromEntries(["rec", "pass_td", "bonus_rec_te", "pass_int", "fum_lost"].map(k => [k, ss[k] === undefined ? null : ss[k]])),
+        // the league allows auto-subs, but Sleeper's API doesn't say who anyone picked
+        auto_subs: num((lg.settings || {}).max_subs) > 0,
       });
     }
 

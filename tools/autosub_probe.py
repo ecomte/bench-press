@@ -62,12 +62,15 @@ def main():
         if not mine:
             continue
         mmu = next((m for m in mu if m.get("roster_id") == mine["roster_id"]), None)
-        dump[lg["name"]] = {"league_settings": lg.get("settings"), "roster": mine, "matchup": mmu}
+        # every team, not just this user's: the opponent's auto-subs matter too
+        dump[lg["name"]] = {"league": lg, "roster": mine, "matchup": mmu, "all_rosters": rosters, "all_matchups": mu}
         print("== %s" % lg["name"])
         print("  roster keys:  %s" % sorted(mine))
         print("  roster metadata keys: %s" % sorted((mine.get("metadata") or {})))
         print("  matchup keys: %s" % sorted(mmu or {}))
-        found = sub_fields({"league.settings": lg.get("settings"), "roster": mine, "matchup": mmu})
+        print("  every matchup key: %s" % sorted(set(k for m in mu for k in m)))
+        print("  every roster key:  %s" % sorted(set(k for r in rosters for k in r)))
+        found = sub_fields({"league": lg, "rosters": rosters, "matchups": mu})
         for p, v in found:
             print("  'sub' field:  %s = %s" % (p, json.dumps(v)[:300]))
         if not found:

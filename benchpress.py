@@ -292,8 +292,7 @@ def main():
             if easy and sleeper_pts:
                 notes.append("W Feast: %s, projection boosted %+d%%" % (A.matchup_text(pos, row), round(100 * (W * (mult - 1) + easy))))
             if tp and row and row["mult"] < 1:
-                notes.append("Handles tough Ds better than most %ss: %.1f a game vs top-third defenses (%d games), %.1f otherwise" % (
-                    pos, tp["avg_tough"], tp["g_tough"], tp["avg_other"]))
+                notes.append("Handles tough Ds better than most %ss" % pos)
             return {
                 "id": pid, "name": A.player_name(pid, pl) if pos != "DEF" else (pl.get("first_name", pid) + " " + pl.get("last_name", "")).strip(),
                 "pos": pos, "fpos": A.player_fpos(pl, pos), "team": team, "status": status,
@@ -457,8 +456,7 @@ def main():
             if p and p["rank"] and p["rank"] <= 3 and p["pos"] != "DEF":
                 tp = tough.get(p["id"]) if p["hold"] else None
                 alerts.append({"level": "info", "text": "%s faces %s (%s).%s" % (p["name"], p["opp"], p["matchup"], (
-                    " He's handled tough defenses better than most (%.1f a game vs the top third, %.1f otherwise), so the matchup counts against him less."
-                    % (tp["avg_tough"], tp["avg_other"])) if tp else "")})
+                    " He handles tough defenses better than most, so the matchup counts against him less.") if tp else "")})
             if p and any(n.startswith("His QB") for n in p["notes"]):
                 alerts.append({"level": "warn", "text": "%s: %s" % (p["name"], [n for n in p["notes"] if n.startswith("His QB")][0])})
         early = [P(x) for x in rec if x and not P(x)["locked"] and P(x)["day"] in ("Thu", "Fri", "Wed")]
@@ -551,6 +549,8 @@ def main():
             # real points so far; locked starters are the same in every lineup view
             "live_pts": round(sum(slot_live(x) for x in cur if x and x != "0"), 1),
             "scoring": {k: ss.get(k) for k in ("rec", "pass_td", "bonus_rec_te", "pass_int", "fum_lost")},
+            # the league allows auto-subs, but Sleeper's API doesn't say who anyone picked
+            "auto_subs": num((lg.get("settings") or {}).get("max_subs")) > 0,
         })
 
     os.makedirs(DATA, exist_ok=True)
