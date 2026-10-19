@@ -307,7 +307,8 @@ function render() {
         '<div class="' + mine + '" style="width:' + p.toFixed(1) + '%"></div><div class="' + theirs + '" style="width:' + (100 - p).toFixed(1) + '%"></div></div>' +
         '<span class="' + theirs + '">' + them + '%</span></div>';
     })() : '') +
-    '<div class="note">' + (started ? 'Green totals are real points so far; "proj" adds projections for players yet to play and for what\'s left of games in progress. ' : '') + 'Recommended ' + L.proj_rec.toFixed(1) + ' (adj) · Sleeper-only best ' + L.proj_rec_sleeper.toFixed(1) +
+    '<div class="note">' + (o && o.subs_in && o.subs_in.length ? '<span style="color:var(--call)">⇄ ' + esc(o.team) + ' total counts auto-sub ' + o.subs_in.map(esc).join(", ") + '.</span> ' : '') +
+    (started ? 'Green totals are real points so far; "proj" adds projections for players yet to play and for what\'s left of games in progress. ' : '') + 'Recommended ' + L.proj_rec.toFixed(1) + ' (adj) · Sleeper-only best ' + L.proj_rec_sleeper.toFixed(1) +
     ' · Your current lineup ' + L.proj_cur.toFixed(1) + ' (Sleeper proj)</div></div>';
   h += '<div class="seg" role="group">' + MODES.map(m => '<button data-m="' + m[0] + '" aria-pressed="' + (mode === m[0]) + '">' + m[1] + '</button>').join("") + '</div>';
   if (L.alerts.length) {

@@ -46,6 +46,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HERE, "python-subscripts"))
 
 import analysis as A  # noqa: E402
+import history as H  # noqa: E402
 import sleeper as S  # noqa: E402
 
 SHEETS = os.path.join(HERE, "sheets")
@@ -103,7 +104,8 @@ def main():
     EASY = float(cfg.get("easy_matchup_boost", 0.30))
     EASY_RANKS = int(cfg.get("easy_matchup_ranks", 3))
     SMASH_GAP = float(cfg.get("smash_alert_gap", 3.0))  # flag a benched smash spot this close to a starter
-    HISTORY = int(cfg.get("history_seasons", 1))  # past seasons used to spot players who beat tough defenses
+    HISTORY = int(cfg.get("history_seasons", 5))  # past seasons used to spot players who beat tough defenses
+    DECAY = float(cfg.get("history_decay", 0.7))  # each season back counts this much less (0.7, 0.49, ...)
     nick = cfg.get("league_nicknames", {}) if not (args.user and args.user.lstrip("@").lower() != cfg["username"].lower()) else {}
     now = dt.datetime.now()
 
@@ -168,22 +170,33 @@ def main():
         for row in dvp.get(pos, {}).values():
             row["easy"] = A.easy_bonus(row, EASY, EASY_RANKS)
 
-    # Past seasons (finished, so cached for good) give players enough games against tough defenses
-    # to tell who holds up against them. Each season's toughness ranks come from that season.
-    log_sets = [logs]
+    # Past seasons give players enough games against tough defenses to tell who holds up against
+    # them. They come from history/stats/ in the repo (tools/stats_backfill.py), or from Sleeper
+    # for a season not saved there yet. Each season's toughness ranks come from that season, and
+    # older seasons count less.
+    log_sets, weights, hist_meta = [logs], [1.0], {}
     for back in range(1, HISTORY + 1):
-        past = {}
-        for w in range(1, 19):
-            try:
-                rows = S.week_stats(str(int(season) - back), w, final=True)
-            except Exception:
-                break
-            if rows:
-                past[w] = rows
+        past_season = str(int(season) - back)
+        past = H.load(past_season)
+        if not past:
+            for w in range(1, 19):
+                try:
+                    rows = S.week_stats(past_season, w, final=True)
+                except Exception:
+                    break
+                if rows:
+                    past[w] = rows
         if past:
-            log_sets.append(A.build_player_logs(past, A.defense_vs_position(past))[0])
-            print("History: %s season, %d weeks" % (int(season) - back, len(past)))
-    tough = A.tough_profile(log_sets, {pid: players.get(pid) or meta.get(pid) for pid in set().union(*log_sets)})
+            past_logs, past_meta = A.build_player_logs(past, A.defense_vs_position(past))
+            log_sets.append(past_logs)
+            weights.append(DECAY ** back)
+            for pid, m in past_meta.items():
+                hist_meta.setdefault(pid, m)
+            print("History: %s season, %d weeks (weight %.2f)" % (past_season, len(past), DECAY ** back))
+    tough = A.tough_profile(log_sets, {pid: players.get(pid) or meta.get(pid) or hist_meta.get(pid)
+                                       for pid in set().union(*log_sets)}, weights=weights)
+    # only players still in the league can be in a lineup, so retired ones stay out of the site data
+    tough = {pid: row for pid, row in tough.items() if (players.get(pid) or {}).get("team")}
     inj = A.team_injuries(players)
     byes_now = sched.byes(week)
 
@@ -479,25 +492,47 @@ def main():
                 o_proj = 0.0
                 o_live = 0.0  # real points so far from their starters whose games have started
                 o_started = False
-                for pid in o.get("starters") or []:
-                    if pid and pid != "0":
-                        opl = players.get(pid) or {}
-                        oteam = pid if pid.isalpha() else opl.get("team")
-                        ogame = sched.game(week, oteam)
-                        ostate = A.game_state(ogame, today)
-                        if ostate in ("live", "final"):
-                            o_now = A.score(live_stats.get(pid, {}), ss)
-                            o_proj += o_now + A.score((proj.get(pid) or {}).get("stats"), ss) * A.game_left(ogame, ostate, now_et)
-                            o_live += o_now
-                            o_started = True
-                        else:
-                            o_proj += A.score((proj.get(pid) or {}).get("stats"), ss)
+
+                def opp_player(pid):
+                    """(projected final, real points so far, game started, sub_state fields) for one of their players."""
+                    opl = players.get(pid) or {}
+                    oteam = pid if pid.isalpha() else opl.get("team")
+                    ogame = sched.game(week, oteam) if oteam else None
+                    ostate = A.game_state(ogame, today)
+                    pj = A.score((proj.get(pid) or {}).get("stats"), ss)
+                    locked = ostate in ("live", "final")
+                    stats = live_stats.get(pid) or {}
+                    st = injury_of(pid)
+                    fields = {"locked": locked, "game_state": ostate, "status": st,
+                              "available": bool(ogame) and st not in A.OUT_STATUSES,
+                              "played": locked and (A.played({"stats": stats, "player_id": pid}) or A.num(stats.get("gms_active")) > 0)}
+                    if locked:
+                        now_pts = A.score(stats, ss)
+                        return now_pts + pj * A.game_left(ogame, ostate, now_et), now_pts, True, fields
+                    return pj, 0.0, False, fields
+
+                # their auto-subs count once it's clear the starter isn't playing (same rule as for you)
+                o_starters = [x for x in (o.get("starters") or []) if x and x != "0"]
+                o_subs = {a: b for a, b in A.auto_subs(o, oro).items() if a in o_starters and b not in o_starters}
+                o_subs_in = []
+                for pid in o_starters:
+                    pj, now_pts, began, fields = opp_player(pid)
+                    if pid in o_subs and A.sub_state(fields) == "in":
+                        pj, now_pts, sub_began, sub_fields = opp_player(o_subs[pid])
+                        if not A.sub_can_score(sub_fields):
+                            pj = now_pts = 0.0
+                        began = began or sub_began
+                        o_subs_in.append("%s for %s" % (A.player_name(o_subs[pid], players.get(o_subs[pid])), A.player_name(pid, players.get(pid))))
+                    o_proj += pj
+                    o_live += now_pts
+                    o_started = o_started or began
                 ost = oro.get("settings") or {}
                 opp_info = {
                     "team": (ou.get("metadata") or {}).get("team_name") or ou.get("display_name") or "Opponent",
                     "owner": ou.get("display_name", ""),
                     "proj": round(o_proj, 1),
                     "live": round(o_live, 1), "started": o_started,
+                    "subs_in": o_subs_in,
                     "record": "%d-%d" % (ost.get("wins", 0), ost.get("losses", 0)),
                 }
         st = mine.get("settings") or {}
