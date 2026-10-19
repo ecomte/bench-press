@@ -394,6 +394,70 @@ def summarize_player(log, pos):
 
 
 # ---------------------------------------------------------------------------
+# Auto-subs: in Sleeper you can pick a bench player from an earlier game to cover a starter
+# (a Questionable Monday night player, say). If the starter doesn't play, the auto-sub's
+# points count for him.
+
+# Where Sleeper's API keeps a team's auto-subs. Not documented: tools/autosub_probe.py
+# prints what a real roster and matchup carry, and this is the one place to adjust.
+AUTO_SUB_KEYS = ("auto_subs", "autosubs", "auto_sub", "subs")
+_STARTER_KEYS = ("starter", "starter_id", "player_id", "original", "from")
+_SUB_KEYS = ("sub", "sub_id", "auto_sub", "substitute", "to")
+
+
+def auto_subs(*objs):
+    """{starter id: auto-sub id} from the first roster or matchup object (or its metadata /
+    settings) that has any. Takes a {starter: sub} map or a list of {starter, sub} pairs."""
+    for o in objs:
+        for where in (o or {}, (o or {}).get("metadata") or {}, (o or {}).get("settings") or {}):
+            if not isinstance(where, dict):
+                continue
+            for k in AUTO_SUB_KEYS:
+                v = where.get(k)
+                out = {}
+                if isinstance(v, dict):
+                    out = {str(a): str(b) for a, b in v.items() if a and b and str(b) != "0"}
+                elif isinstance(v, list):
+                    for e in v:
+                        if isinstance(e, dict):
+                            a = next((e[x] for x in _STARTER_KEYS if e.get(x)), None)
+                            b = next((e[x] for x in _SUB_KEYS if e.get(x)), None)
+                        elif isinstance(e, (list, tuple)) and len(e) == 2:
+                            a, b = e
+                        else:
+                            continue
+                        if a and b and str(b) != "0":
+                            out[str(a)] = str(b)
+                if out:
+                    return out
+    return {}
+
+
+def sub_state(s):
+    """Where a starter's auto-sub stands: 'in' (he isn't playing, so the sub's points count),
+    'doubtful' (probably sits), 'backup' (expected to play) or 'unused' (his game started
+    and he played)."""
+    if s["locked"]:
+        return "in" if (not s["available"] or (s["game_state"] == "final" and not s["played"])) else "unused"
+    if not s["available"]:
+        return "in"
+    return "doubtful" if s["status"] == "Doubtful" else "backup"
+
+
+def sub_can_score(b):
+    """Can auto-sub b still put up points: healthy before his game, or on the field once it starts?"""
+    return (b["played"] or b["game_state"] == "live") if b["locked"] else b["available"]
+
+
+def sub_options(slot, s, bench):
+    """Bench players who could be an auto-sub for starter s in slot: eligible there, healthy,
+    and playing on an earlier day so their game finishes first. Best first."""
+    elig = SLOT_ELIG.get(slot) or set()
+    return [b for b in bench if b["available"] and not b["locked"] and b["date"] and s["date"]
+            and b["date"] < s["date"] and elig.intersection(b.get("fpos") or [b["pos"]])]
+
+
+# ---------------------------------------------------------------------------
 # Lineup optimizer
 
 def fill_lineup(slots, pool, key, preset=None, exclude=()):

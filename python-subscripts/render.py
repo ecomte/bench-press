@@ -52,6 +52,13 @@ def report_md(d, dvp):
                 (("%s %.1f" % ("FINAL" if r["game_state"] == "final" else "LIVE", r["actual"] or 0)) if r["locked"] else ("%.1f" % r["adj"])) if r else "",
                 ("%.1f" % r["sleeper"]) if r else "",
                 r["avg"] if r and r["avg"] is not None else "-", "same" if same else "**" + _p(c) + "**"))
+        subs = [s for s in lg["lineup"] if s.get("autosub")]
+        if subs:
+            L.append("")
+            L.append("Auto-subs: " + "; ".join("%s covers %s (%s)" % (
+                s["autosub"]["player"]["name"], s["cur"]["name"],
+                {"in": "his points count", "doubtful": "starter Doubtful", "unused": "not needed",
+                 "backup": "backup"}[s["autosub"]["state"]]) for s in subs))
         L.append("")
         L.append("Bench: " + "; ".join("%s %.1f%s" % (p["name"], p["adj"], (" [%s]" % p["why"]) if p["why"] else "") for p in lg["bench"]))
         if lg["stash"]:
