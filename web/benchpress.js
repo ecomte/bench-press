@@ -448,7 +448,7 @@
           notes.push("W Feast: " + matchupText(pos, row) + ", projection boosted " + (pct >= 0 ? "+" : "") + pct + "%");
         }
         if (tp && row && row.mult < 1) {
-          notes.push("Handles tough Ds better than most " + pos + "s: " + f1(tp.avg_tough) + " a game vs top-third defenses (" + tp.g_tough + " games), " + f1(tp.avg_other) + " otherwise");
+          notes.push("Handles tough Ds better than most " + pos + "s");
         }
         const last3 = pts.slice(-3);
         return {
@@ -603,8 +603,7 @@
         if (p && p.locked) continue;
         if (p && p.rank && p.rank <= 3 && p.pos !== "DEF") {
           const tp = p.hold ? tough[p.id] : null;
-          alerts.push({ level: "info", text: p.name + " faces " + p.opp + " (" + p.matchup + ")." + (tp ? " He's handled tough defenses better than most (" +
-            f1(tp.avg_tough) + " a game vs the top third, " + f1(tp.avg_other) + " otherwise), so the matchup counts against him less." : "") });
+          alerts.push({ level: "info", text: p.name + " faces " + p.opp + " (" + p.matchup + ")." + (tp ? " He handles tough defenses better than most, so the matchup counts against him less." : "") });
         }
         if (p) {
           const qb = p.notes.find(n => n.startsWith("His QB"));
@@ -637,19 +636,39 @@
           const oro = rosterIds[o.roster_id] || {};
           const ou = users[oro.owner_id] || {};
           let oProj = 0, oLive = 0, oStarted = false;
-          for (const pid of o.starters || []) {
-            if (!pid || pid === "0") continue;
+          // opp_player() in benchpress.py: [projected final, real points so far, game started, sub_state fields]
+          const oppPlayer = (pid) => {
             const opl = players[pid] || {};
             const oteam = isAlpha(pid) ? pid : opl.team;
-            const og = sched.game(week, oteam);
-            const st = gameState(og, today);
-            if (st === "live" || st === "final") {
+            const og = oteam ? sched.game(week, oteam) : null;
+            const gs = gameState(og, today);
+            const pj = score((proj[pid] || {}).stats, ss);
+            const locked = gs === "live" || gs === "final";
+            const st = injuryOf(pid);
+            const fields = { locked, game_state: gs, status: st, available: !!og && !OUT_STATUSES.has(st),
+              played: locked && playedWeek(liveStats[pid], pid) };
+            if (locked) {
               const a = score(liveStats[pid] || {}, ss);
-              oProj += a + score((proj[pid] || {}).stats, ss) * gameLeft(og, st, clock);
-              oLive += a; oStarted = true;
-            } else {
-              oProj += score((proj[pid] || {}).stats, ss);
+              return [a + pj * gameLeft(og, gs, clock), a, true, fields];
             }
+            return [pj, 0, false, fields];
+          };
+          // their auto-subs count once it's clear the starter isn't playing (same rule as for you)
+          const oStarters = (o.starters || []).filter(x => x && x !== "0");
+          const oSubs = {};
+          for (const [a, b] of Object.entries(autoSubs(o, oro))) if (oStarters.includes(a) && !oStarters.includes(b)) oSubs[a] = b;
+          const oSubsIn = [];
+          for (const pid of oStarters) {
+            let [pj, nowPts, began, fields] = oppPlayer(pid);
+            if (oSubs[pid] && subState(fields) === "in") {
+              const [spj, snow, sbegan, sfields] = oppPlayer(oSubs[pid]);
+              [pj, nowPts] = subCanScore(sfields) ? [spj, snow] : [0, 0];
+              began = began || sbegan;
+              oSubsIn.push(playerName(oSubs[pid], players[oSubs[pid]]) + " for " + playerName(pid, players[pid]));
+            }
+            oProj += pj;
+            oLive += nowPts;
+            oStarted = oStarted || began;
           }
           const ost = oro.settings || {};
           oppInfo = {
@@ -657,6 +676,7 @@
             owner: ou.display_name || "",
             proj: r1(oProj),
             live: r1(oLive), started: oStarted,
+            subs_in: oSubsIn,
             record: (ost.wins || 0) + "-" + (ost.losses || 0),
           };
         }
@@ -677,6 +697,8 @@
         any_locked: cur.some(x => x && x !== "0" && P(x).locked),
         live_pts: r1(sum(cur.filter(x => x && x !== "0").map(slotLive))),
         scoring: Object.fromEntries(["rec", "pass_td", "bonus_rec_te", "pass_int", "fum_lost"].map(k => [k, ss[k] === undefined ? null : ss[k]])),
+        // the league allows auto-subs, but Sleeper's API doesn't say who anyone picked
+        auto_subs: num((lg.settings || {}).max_subs) > 0,
       });
     }
 
