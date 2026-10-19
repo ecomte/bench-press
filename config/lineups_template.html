@@ -343,6 +343,7 @@ function render() {
   }
   h += '<p class="legend">Big number = projected points with this league\'s scoring. "Adj" moves Sleeper\'s projection ' +
     (DATA.matchup_weight * 100).toFixed(0) + '% of the way toward what the opposing defense usually gives up to that position. ' +
+    'Smash spots (the 3 easiest defenses vs a position) get an extra boost on top, and players who\'ve handled tough defenses better than most get part of a tough-matchup penalty waived; the player notes say when. ' +
     'Matchup tag: <span class="mu tough">red = top-8 toughest</span> <span class="mu easy">green = top-8 easiest</span>. ' +
     'Orange rows are changes from your current Sleeper lineup. <span style="color:var(--good)">Green numbers</span> are real points from games already played (FINAL) or in progress (LIVE), with the projection underneath. Those players are locked, so they\'re never moved. ' +
     '<span style="color:var(--call)">⇄ Auto-sub</span> lines show the bench player you picked in Sleeper to cover a starter: if the starter doesn\'t play, the sub\'s points count, and the totals include that.</p>';

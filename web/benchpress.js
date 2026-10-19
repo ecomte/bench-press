@@ -90,6 +90,15 @@
     return r <= of / 2 ? ordinal(r) + "-toughest vs " + pos : ordinal(of - r + 1) + "-easiest vs " + pos;
   }
 
+  const SKILL_POS = ["QB", "RB", "WR", "TE"];
+
+  // matchup_mult() in analysis.py: a tough-matchup penalty, partly waived for players who hold up
+  function matchupMult(row, hold) {
+    let mult = row ? row.mult : 1.0;
+    if (mult < 1 && hold) mult = pyRound(1 - (1 - mult) * (1 - hold), 3);
+    return mult;
+  }
+
   function parseDate(s) {
     const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s || "");
     return m ? new Date(+m[1], +m[2] - 1, +m[3]) : null;
@@ -347,6 +356,8 @@
     }
 
     const dvp = stat.dvp || {};
+    const tough = stat.tough || {};
+    const smashGap = num(stat.smash_gap === undefined ? 3.0 : stat.smash_gap);
     const logs = stat.logs || {};
     const inj = stat.injuries || {};
     const byesNow = sched.byes(week);
@@ -412,8 +423,10 @@
         }
         const opp = game ? game.opp : null;
         const row = opp ? ((dvp[pos] || {})[opp] || null) : null;
-        const mult = row ? row.mult : 1.0;
-        const adj = sleeperPts * (1 + W * (mult - 1));
+        const tp = SKILL_POS.includes(pos) ? (tough[pid] || null) : null;
+        const mult = matchupMult(row, tp ? tp.hold : 0);
+        const easy = row ? (row.easy || 0) : 0;
+        const adj = sleeperPts * (1 + W * (mult - 1) + easy);
         let why = "";
         if (!team) why = "Free agent / no team";
         else if (!game) why = "BYE";
@@ -430,6 +443,13 @@
             if (x.pos === "QB" && HURT.has(x.status)) notes.push("His QB " + x.name + " is " + x.status);
           }
         }
+        if (easy && sleeperPts) {
+          const pct = pyRound(100 * (W * (mult - 1) + easy), 0);
+          notes.push("Smash spot: " + matchupText(pos, row) + ", projection boosted " + (pct >= 0 ? "+" : "") + pct + "%");
+        }
+        if (tp && row && row.mult < 1) {
+          notes.push("Handles tough Ds better than most " + pos + "s: " + f1(tp.avg_tough) + " a game vs top-third defenses (" + tp.g_tough + " games), " + f1(tp.avg_other) + " otherwise");
+        }
         const last3 = pts.slice(-3);
         return {
           id: pid,
@@ -439,7 +459,8 @@
           date: game ? game.date : null,
           sleeper: r2(sleeperPts * factor), adj: r2(adj * factor),
           raw_sleeper: r2(sleeperPts),
-          mult, rank: row ? row.rank : null, of: row ? row.of : null,
+          mult, easy, hold: tp ? tp.hold : 0,
+          rank: row ? row.rank : null, of: row ? row.of : null,
           matchup: matchupText(pos, row), available: why === "",
           why, notes,
           gp: pts.length, avg: pts.length ? r1(pts.reduce((a, b) => a + b, 0) / pts.length) : null,
@@ -563,10 +584,28 @@
         alerts.push({ level: "call", text: "Matchup call: Sleeper's projections alone would start " + sOnly.map(d).join(", ") +
           "; the matchup data prefers " + aOnly.map(d).join(", ") + ". Close one, your call." });
       }
+      // smash spots on the bench that came close: worth a look even with a lower number
+      for (const p of bench) {
+        if (!p.easy || !p.available || p.locked) continue;
+        const spots = slots.map((s, i) => [i, s]).filter(([i, s]) => rec[i] && !P(rec[i]).locked &&
+          (p.fpos || [p.pos]).some(x => (SLOT_ELIG[s] || []).includes(x)));
+        if (!spots.length) continue;
+        let [i] = spots[0];
+        for (const [j] of spots) if (P(rec[j]).adj < P(rec[i]).adj) i = j;
+        const q = P(rec[i]);
+        if (q.adj - p.adj <= smashGap) {
+          alerts.push({ level: "call", text: "Smash spot: " + p.name + " (" + f1(p.adj) + ") faces " + p.opp + ", the " + p.matchup +
+            ". Worth a look over " + q.name + " (" + f1(q.adj) + ") at " + (SLOT_LABEL[slots[i]] || slots[i]) + "." });
+        }
+      }
       for (const x of rec) {
         const p = P(x);
         if (p && p.locked) continue;
-        if (p && p.rank && p.rank <= 3 && p.pos !== "DEF") alerts.push({ level: "info", text: p.name + " faces " + p.opp + " (" + p.matchup + ")." });
+        if (p && p.rank && p.rank <= 3 && p.pos !== "DEF") {
+          const tp = p.hold ? tough[p.id] : null;
+          alerts.push({ level: "info", text: p.name + " faces " + p.opp + " (" + p.matchup + ")." + (tp ? " He's handled tough defenses better than most (" +
+            f1(tp.avg_tough) + " a game vs the top third, " + f1(tp.avg_other) + " otherwise), so the matchup counts against him less." : "") });
+        }
         if (p) {
           const qb = p.notes.find(n => n.startsWith("His QB"));
           if (qb) alerts.push({ level: "warn", text: p.name + ": " + qb });

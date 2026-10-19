@@ -99,6 +99,11 @@ def main():
 
     cfg = load_config()
     W = float(cfg.get("matchup_weight", 0.5))
+    # smash spots: the easiest few defenses vs a position add up to this much on top of the matchup
+    EASY = float(cfg.get("easy_matchup_boost", 0.30))
+    EASY_RANKS = int(cfg.get("easy_matchup_ranks", 3))
+    SMASH_GAP = float(cfg.get("smash_alert_gap", 3.0))  # flag a benched smash spot this close to a starter
+    HISTORY = int(cfg.get("history_seasons", 1))  # past seasons used to spot players who beat tough defenses
     nick = cfg.get("league_nicknames", {}) if not (args.user and args.user.lstrip("@").lower() != cfg["username"].lower()) else {}
     now = dt.datetime.now()
 
@@ -159,6 +164,26 @@ def main():
 
     dvp = A.defense_vs_position(weekly)
     logs, meta = A.build_player_logs(weekly, dvp)
+    for pos in A.SKILL_POS:
+        for row in dvp.get(pos, {}).values():
+            row["easy"] = A.easy_bonus(row, EASY, EASY_RANKS)
+
+    # Past seasons (finished, so cached for good) give players enough games against tough defenses
+    # to tell who holds up against them. Each season's toughness ranks come from that season.
+    log_sets = [logs]
+    for back in range(1, HISTORY + 1):
+        past = {}
+        for w in range(1, 19):
+            try:
+                rows = S.week_stats(str(int(season) - back), w, final=True)
+            except Exception:
+                break
+            if rows:
+                past[w] = rows
+        if past:
+            log_sets.append(A.build_player_logs(past, A.defense_vs_position(past))[0])
+            print("History: %s season, %d weeks" % (int(season) - back, len(past)))
+    tough = A.tough_profile(log_sets, {pid: players.get(pid) or meta.get(pid) for pid in set().union(*log_sets)})
     inj = A.team_injuries(players)
     byes_now = sched.byes(week)
 
@@ -228,8 +253,10 @@ def main():
                 sleeper_pts = sum(past) / len(past) if past else 0.0
             opp = game["opp"] if game else None
             row = dvp.get(pos, {}).get(opp) if opp else None
-            mult = row["mult"] if row else 1.0
-            adj = sleeper_pts * (1 + W * (mult - 1))
+            tp = tough.get(pid) if pos in A.SKILL_POS else None
+            mult = A.matchup_mult(row, tp["hold"] if tp else 0)
+            easy = row.get("easy", 0) if row else 0
+            adj = sleeper_pts * (1 + W * (mult - 1) + easy)
             why = ""
             if not team:
                 why = "Free agent / no team"
@@ -249,6 +276,11 @@ def main():
                 for x in inj.get(team, {}).get("off", []):
                     if x["pos"] == "QB" and x["status"] in ("Out", "IR", "Doubtful", "PUP", "Sus"):
                         notes.append("His QB %s is %s" % (x["name"], x["status"]))
+            if easy and sleeper_pts:
+                notes.append("Smash spot: %s, projection boosted %+d%%" % (A.matchup_text(pos, row), round(100 * (W * (mult - 1) + easy))))
+            if tp and row and row["mult"] < 1:
+                notes.append("Handles tough Ds better than most %ss: %.1f a game vs top-third defenses (%d games), %.1f otherwise" % (
+                    pos, tp["avg_tough"], tp["g_tough"], tp["avg_other"]))
             return {
                 "id": pid, "name": A.player_name(pid, pl) if pos != "DEF" else (pl.get("first_name", pid) + " " + pl.get("last_name", "")).strip(),
                 "pos": pos, "fpos": A.player_fpos(pl, pos), "team": team, "status": status,
@@ -256,7 +288,8 @@ def main():
                 "date": game["date"] if game else None,
                 "sleeper": round(sleeper_pts * factor, 2), "adj": round(adj * factor, 2),
                 "raw_sleeper": round(sleeper_pts, 2),
-                "mult": mult, "rank": row["rank"] if row else None, "of": row["of"] if row else None,
+                "mult": mult, "easy": easy, "hold": tp["hold"] if tp else 0,
+                "rank": row["rank"] if row else None, "of": row["of"] if row else None,
                 "matchup": A.matchup_text(pos, row), "available": why == "",
                 "why": why, "notes": notes,
                 "gp": len(pts), "avg": round(sum(pts) / len(pts), 1) if pts else None,
@@ -392,12 +425,27 @@ def main():
             alerts.append({"level": "call", "text": "Matchup call: Sleeper's projections alone would start %s; the matchup data prefers %s. Close one, your call." % (
                 ", ".join("%s (%.1f, %s)" % (P(x)["name"], P(x)["sleeper"], P(x)["matchup"] or "no data") for x in s_only),
                 ", ".join("%s (%.1f, %s)" % (P(x)["name"], P(x)["sleeper"], P(x)["matchup"] or "no data") for x in a_only))})
+        # smash spots on the bench that came close: worth a look even with a lower number
+        for p in bench:
+            if not p["easy"] or not p["available"] or p["locked"]:
+                continue
+            spots = [(i, P(rec[i])) for i, s in enumerate(slots) if rec[i] and not P(rec[i])["locked"]
+                     and (A.SLOT_ELIG.get(s) or set()).intersection(p.get("fpos") or [p["pos"]])]
+            if not spots:
+                continue
+            i, q = min(spots, key=lambda t: (t[1]["adj"], t[0]))
+            if q["adj"] - p["adj"] <= SMASH_GAP:
+                alerts.append({"level": "call", "text": "Smash spot: %s (%.1f) faces %s, the %s. Worth a look over %s (%.1f) at %s." % (
+                    p["name"], p["adj"], p["opp"], p["matchup"], q["name"], q["adj"], A.SLOT_LABEL.get(slots[i], slots[i]))})
         for x in rec:
             p = P(x)
             if p and p["locked"]:
                 continue
             if p and p["rank"] and p["rank"] <= 3 and p["pos"] != "DEF":
-                alerts.append({"level": "info", "text": "%s faces %s (%s)." % (p["name"], p["opp"], p["matchup"])})
+                tp = tough.get(p["id"]) if p["hold"] else None
+                alerts.append({"level": "info", "text": "%s faces %s (%s).%s" % (p["name"], p["opp"], p["matchup"], (
+                    " He's handled tough defenses better than most (%.1f a game vs the top third, %.1f otherwise), so the matchup counts against him less."
+                    % (tp["avg_tough"], tp["avg_other"])) if tp else "")})
             if p and any(n.startswith("His QB") for n in p["notes"]):
                 alerts.append({"level": "warn", "text": "%s: %s" % (p["name"], [n for n in p["notes"] if n.startswith("His QB")][0])})
         early = [P(x) for x in rec if x and not P(x)["locked"] and P(x)["day"] in ("Thu", "Fri", "Wed")]
@@ -509,7 +557,9 @@ def main():
         game = sched.game(week, team) if team else None
         opp = game["opp"] if game else None
         row = dvp.get(pos, {}).get(opp) if opp else None
-        mult = row["mult"] if row else 1.0
+        tp = tough.get(pid) if pos in A.SKILL_POS else None
+        mult = A.matchup_mult(row, tp["hold"] if tp else 0)
+        easy = row.get("easy", 0) if row else 0
         pj = proj_idp.get(pid, 0) if pos in A.IDP_POS else proj_half.get(pid, 0)
         base = {
             "player": A.player_name(pid, pl), "pos": pos, "team": team,
@@ -523,8 +573,10 @@ def main():
             "opp_toughness_rank": row["rank"] if row else "",
             "opp_matchup": A.matchup_text(pos, row),
             "opp_multiplier": mult if row else "",
+            "smash_boost": easy or "",
+            "tough_d_hold": tp["hold"] if tp else "",
             "sleeper_proj_half": round(pj, 2),
-            "matchup_adj_proj_half": round(pj * (1 + W * (mult - 1)), 2),
+            "matchup_adj_proj_half": round(pj * (1 + W * (mult - 1) + easy), 2),
             "player_id": pid,
         })
         if pos == "DEF":
@@ -540,7 +592,7 @@ def main():
         sheet_rows[sheet_of[pos]].append(base)
 
     head = ["player", "pos", "team", "rostered_by", "injury", "bye_week", "next_opp", "next_game_day",
-            "opp_toughness_rank", "opp_matchup", "opp_multiplier", "sleeper_proj_half", "matchup_adj_proj_half",
+            "opp_toughness_rank", "opp_matchup", "opp_multiplier", "smash_boost", "tough_d_hold", "sleeper_proj_half", "matchup_adj_proj_half",
             "gp", "avg_half_ppr", "avg_ppr", "last3_avg_half", "best", "worst",
             "avg_vs_top10_def", "games_vs_top10_def", "avg_vs_other_def", "snap_pct"]
     statcols = {
@@ -664,7 +716,7 @@ def main():
         import sitedata
         scoring_keys = set(k for lg in leagues for k, v in (lg.get("scoring_settings") or {}).items() if v)
         sitedata.write(args.site, cfg, season, week, W, players, sched_raw, proj_list, live_list,
-                       sorted(weekly), dvp, logs, inj, scoring_keys)
+                       sorted(weekly), dvp, logs, inj, scoring_keys, tough)
         print("Site:    %s" % os.path.join(site_dir, "index.html"))
     else:
         print("Player photos for the phone page...")
