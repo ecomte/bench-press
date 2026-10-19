@@ -1,6 +1,6 @@
 # Bench Press
 
-[![Release](https://img.shields.io/badge/release-v1.2.0-green)](https://github.com/ecomte/bench-press/releases)
+[![Release](https://img.shields.io/badge/release-v1.3.0-green)](https://github.com/ecomte/bench-press/releases)
 
 **Open Bench Press: [ecomte.github.io/bench-press](https://ecomte.github.io/bench-press/)**. Search your Sleeper username to see your lineups.
 
@@ -19,6 +19,7 @@ This repository is the GitHub version of Bench Press. It began as a set of scrip
 | 1.0.1 | Refreshed lineups survive a page reload; version and copyright in the footer (BP-5). |
 | 1.1.0 | IDP support, phone alerts for new users, and a changelog link in the footer (BP-7). |
 | 1.2.0 | Sleeper auto-subs (BP-9), case-insensitive usernames for live links and alerts (BP-9), and smash-spot and tough-defense matchup weighting (BP-10). |
+| 1.3.0 | Smash spots renamed W Feast with a green note, and tough-defense notes in darker orange (BP-12). |
 
 Release notes for each version are on the [Releases page](https://github.com/ecomte/bench-press/releases). The original design and trade-offs are in [docs/static-site-plan.md](docs/static-site-plan.md).
 
