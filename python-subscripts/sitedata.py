@@ -39,7 +39,7 @@ def _dump(path, obj):
 
 
 def write(site, cfg, season, week, matchup_weight, players, schedule, proj_list, live_list,
-          stats_weeks, dvp, logs, injuries, scoring_keys):
+          stats_weeks, dvp, logs, injuries, scoring_keys, tough=None):
     out = os.path.join(os.path.abspath(site), "data")
     static_path = os.path.join(out, "static.json")
 
@@ -58,8 +58,11 @@ def write(site, cfg, season, week, matchup_weight, players, schedule, proj_list,
         "league_order": cfg.get("league_order") or [],
         "ignore_leagues": cfg.get("ignore_leagues") or [],
         "scoring_keys": sorted(keys),
-        "dvp": {pos: {t: {"rank": r["rank"], "of": r["of"], "mult": r["mult"]} for t, r in rows.items()}
+        "dvp": {pos: {t: dict({"rank": r["rank"], "of": r["of"], "mult": r["mult"]}, **({"easy": r["easy"]} if r.get("easy") else {}))
+                      for t, r in rows.items()}
                 for pos, rows in dvp.items() if not pos.startswith("_")},
+        "smash_gap": float(cfg.get("smash_alert_gap", 3.0)),
+        "tough": tough or {},  # players who hold up against tough defenses (analysis.tough_profile)
         "logs": {pid: [_slim(e["stats"], keys) for e in entries] for pid, entries in logs.items()},
         "injuries": {t: v for t, v in injuries.items()},
     })

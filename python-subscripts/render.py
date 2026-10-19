@@ -24,7 +24,9 @@ def report_md(d, dvp):
     L.append("")
     L.append("**How to read this:** *Sleeper* is Sleeper's projection scored with that league's rules. "
              "*Adj* nudges it by the opponent's points allowed to that position (matchup weight %.2f; "
-             "1.0 would apply the full defense effect). Toughness rank 1 = defense that allows the fewest points." % d["matchup_weight"])
+             "1.0 would apply the full defense effect). Toughness rank 1 = defense that allows the fewest points. "
+             "*Smash spots* (the easiest few defenses vs a position) get an extra boost, and players who've handled "
+             "tough defenses better than most at their position get part of a tough-matchup penalty waived." % d["matchup_weight"])
     L.append("")
     for lg in d["leagues"]:
         L.append("## %s" % lg["name"])
