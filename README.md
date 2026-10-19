@@ -1,6 +1,6 @@
 # Bench Press
 
-[![Release](https://img.shields.io/badge/release-v1.1.0-green)](https://github.com/ecomte/bench-press/releases)
+[![Release](https://img.shields.io/badge/release-v1.2.0-green)](https://github.com/ecomte/bench-press/releases)
 
 **Open Bench Press: [ecomte.github.io/bench-press](https://ecomte.github.io/bench-press/)**. Search your Sleeper username to see your lineups.
 
@@ -10,16 +10,19 @@ Fantasy football lineup suggestions for Sleeper leagues. Bench Press pulls your 
 
 This repository is the GitHub version of Bench Press. It began as a set of scripts run by hand on a Mac, with the pages shared by hand afterward. Here the same code is built and published automatically to a free GitHub Pages site, so anyone on the list can open their link and see a current lineup without the owner running anything.
 
-## Status
+## Releases
 
-| Phase | What it delivers | State |
-|---|---|---|
-| 1. Scheduled builds | GitHub Actions runs the Python on a schedule and deploys one page per person to GitHub Pages. | Released in 0.1.0 (beta) |
-| 2. Live refresh | A Refresh button that rebuilds the lineup in the browser from live Sleeper data, for any username (`?u=<name>`). | In progress (BP-3) |
+| Version | What it added |
+|---|---|
+| 0.1.0 (beta) | Scheduled GitHub Actions builds that deploy one lineup page per person to GitHub Pages (BP-1). |
+| 1.0.0 | Live Refresh button, live scoreboard and win-probability bar, the landing-page username search and `live/?u=<name>` pages for anyone (BP-3). |
+| 1.0.1 | Refreshed lineups survive a page reload; version and copyright in the footer (BP-5). |
+| 1.1.0 | IDP support, phone alerts for new users, and a changelog link in the footer (BP-7). |
+| 1.2.0 | Sleeper auto-subs (BP-9), case-insensitive usernames for live links and alerts (BP-9), and smash-spot and tough-defense matchup weighting (BP-10). |
 
-The design, the trade-offs, and the open questions (such as whether Sleeper's projections endpoint allows browser calls) are in [docs/static-site-plan.md](docs/static-site-plan.md).
+Release notes for each version are on the [Releases page](https://github.com/ecomte/bench-press/releases). The original design and trade-offs are in [docs/static-site-plan.md](docs/static-site-plan.md).
 
-## How it will be set up
+## How it's set up
 
 ```
 Sleeper API ──► GitHub Actions (scheduled) ──► benchpress.py for each user ──► GitHub Pages
@@ -102,8 +105,10 @@ Alerts on the page are **Fix** (empty slot or an unavailable starter), **Swap** 
 | `python-subscripts/render.py` | The weekly report and the lineup page. |
 | `python-subscripts/sitedata.py` | Writes the shared data files the Refresh button reads. |
 | `web/benchpress.js` | The Refresh button's lineup builder, a JavaScript port of the per-week logic. |
+| `tools/autosub_probe.py` | Prints what Sleeper returns for your leagues' auto-subs, to check Bench Press can read them. |
 | `tools/parity.js` | Replays the build's Sleeper responses through `web/benchpress.js` and checks it picks the same lineups as the Python. |
 | `config/lineups_template.html` | The look of the lineup page. |
+| `.github/workflows/` | `build.yml` (scheduled build and Pages deploy) and `cascade-merge.yml` (merges `main` back into `develop`). |
 | `docs/` | Design notes, starting with the static-site plan. |
 
 ## Data sources
@@ -111,15 +116,16 @@ Alerts on the page are **Fix** (empty slot or an unavailable starter), **Swap** 
 All data comes from Sleeper, so names, IDs, injury tags and scoring match the app.
 
 - **Documented API** (`api.sleeper.app/v1`): users, leagues, rosters, matchups and players. No key is needed.
-- **Undocumented app endpoints** (`api.sleeper.com`): weekly stats, projections and the schedule. These are unofficial, so if they change, `python-subscripts/sleeper.py` is the only file to fix.
+- **Undocumented app endpoints** (`api.sleeper.com`): weekly stats, projections and the schedule. These are unofficial, so if they change, `python-subscripts/sleeper.py` is the only file to fix. Last season's weekly stats (for the tough-defense check) are downloaded once and kept.
+- **Auto-subs:** Sleeper doesn't document where it stores them. Bench Press checks the likely field names, which haven't been confirmed against live data yet; `python3 tools/autosub_probe.py` shows what your leagues return.
 
 The API is read-only, so lineup changes are made in the Sleeper app.
 
 ## Roadmap
 
-- Phase 1: Actions workflow, a `--site` output option, and Pages deploy (BP-1).
 - An Ohio Fantasy rebuild mode, as a per-league setting that favors young players and long-term value.
-- Phase 2: the live Refresh button, checked against the Python output (BP-3, in progress).
+- Confirm Sleeper's auto-sub field with `tools/autosub_probe.py` and point `AUTO_SUB_KEYS` at it.
+- Count opponents' auto-subs in the matchup score.
 
 ## License
 
