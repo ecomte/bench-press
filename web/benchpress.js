@@ -445,7 +445,7 @@
         }
         if (easy && sleeperPts) {
           const pct = pyRound(100 * (W * (mult - 1) + easy), 0);
-          notes.push("Smash spot: " + matchupText(pos, row) + ", projection boosted " + (pct >= 0 ? "+" : "") + pct + "%");
+          notes.push("W Feast: " + matchupText(pos, row) + ", projection boosted " + (pct >= 0 ? "+" : "") + pct + "%");
         }
         if (tp && row && row.mult < 1) {
           notes.push("Handles tough Ds better than most " + pos + "s: " + f1(tp.avg_tough) + " a game vs top-third defenses (" + tp.g_tough + " games), " + f1(tp.avg_other) + " otherwise");
@@ -594,7 +594,7 @@
         for (const [j] of spots) if (P(rec[j]).adj < P(rec[i]).adj) i = j;
         const q = P(rec[i]);
         if (q.adj - p.adj <= smashGap) {
-          alerts.push({ level: "call", text: "Smash spot: " + p.name + " (" + f1(p.adj) + ") faces " + p.opp + ", the " + p.matchup +
+          alerts.push({ level: "call", text: "W Feast: " + p.name + " (" + f1(p.adj) + ") faces " + p.opp + ", the " + p.matchup +
             ". Worth a look over " + q.name + " (" + f1(q.adj) + ") at " + (SLOT_LABEL[slots[i]] || slots[i]) + "." });
         }
       }

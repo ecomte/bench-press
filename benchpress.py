@@ -277,7 +277,7 @@ def main():
                     if x["pos"] == "QB" and x["status"] in ("Out", "IR", "Doubtful", "PUP", "Sus"):
                         notes.append("His QB %s is %s" % (x["name"], x["status"]))
             if easy and sleeper_pts:
-                notes.append("Smash spot: %s, projection boosted %+d%%" % (A.matchup_text(pos, row), round(100 * (W * (mult - 1) + easy))))
+                notes.append("W Feast: %s, projection boosted %+d%%" % (A.matchup_text(pos, row), round(100 * (W * (mult - 1) + easy))))
             if tp and row and row["mult"] < 1:
                 notes.append("Handles tough Ds better than most %ss: %.1f a game vs top-third defenses (%d games), %.1f otherwise" % (
                     pos, tp["avg_tough"], tp["g_tough"], tp["avg_other"]))
@@ -435,7 +435,7 @@ def main():
                 continue
             i, q = min(spots, key=lambda t: (t[1]["adj"], t[0]))
             if q["adj"] - p["adj"] <= SMASH_GAP:
-                alerts.append({"level": "call", "text": "Smash spot: %s (%.1f) faces %s, the %s. Worth a look over %s (%.1f) at %s." % (
+                alerts.append({"level": "call", "text": "W Feast: %s (%.1f) faces %s, the %s. Worth a look over %s (%.1f) at %s." % (
                     p["name"], p["adj"], p["opp"], p["matchup"], q["name"], q["adj"], A.SLOT_LABEL.get(slots[i], slots[i]))})
         for x in rec:
             p = P(x)

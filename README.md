@@ -1,6 +1,6 @@
 # Bench Press
 
-[![Release](https://img.shields.io/badge/release-v1.2.0-green)](https://github.com/ecomte/bench-press/releases)
+[![Release](https://img.shields.io/badge/release-v1.3.0-green)](https://github.com/ecomte/bench-press/releases)
 
 **Open Bench Press: [ecomte.github.io/bench-press](https://ecomte.github.io/bench-press/)**. Search your Sleeper username to see your lineups.
 
@@ -19,6 +19,7 @@ This repository is the GitHub version of Bench Press. It began as a set of scrip
 | 1.0.1 | Refreshed lineups survive a page reload; version and copyright in the footer (BP-5). |
 | 1.1.0 | IDP support, phone alerts for new users, and a changelog link in the footer (BP-7). |
 | 1.2.0 | Sleeper auto-subs (BP-9), case-insensitive usernames for live links and alerts (BP-9), and smash-spot and tough-defense matchup weighting (BP-10). |
+| 1.3.0 | Smash spots renamed W Feast with a green note, and tough-defense notes in darker orange (BP-12). |
 
 Release notes for each version are on the [Releases page](https://github.com/ecomte/bench-press/releases). The original design and trade-offs are in [docs/static-site-plan.md](docs/static-site-plan.md).
 
@@ -69,8 +70,8 @@ The first run takes about 20 seconds, because it downloads Sleeper's 5 MB player
 
 1. **Projection.** Sleeper's weekly projection, re-scored with each league's scoring (half or full PPR, 6-point passing TDs, TE premium).
 2. **Matchup adjustment.** Each defense's points allowed to the position, compared with the league average and shrunk toward average for small samples. The projection moves 50% of the way toward that, set by `matchup_weight` in `config/config.json`, because Sleeper already accounts for matchups somewhat.
-   - **Smash spots.** Projections tend to undersell a player facing one of the very easiest defenses for his position, so QBs, RBs, WRs and TEs facing the 3 easiest (`easy_matchup_ranks`) get an extra boost on top: up to 30% (`easy_matchup_boost`) against the easiest, two thirds of that against the 2nd-easiest and one third against the 3rd, scaled down early in the season when the defense has played only a few games. A lower-projected player in a smash spot can now win a slot over a higher-projected one, and a smash-spot player left on the bench within 3 points (`smash_alert_gap`) of a starter he could replace gets a **Your call** alert.
-   - **Players who handle tough defenses.** For each skill player, his points against the toughest third of defenses are compared with his points against everyone else, using this season plus last season (`history_seasons`). Most players drop off against tough defenses; one who drops off less than is typical for his position, or not at all, gets part of a tough-matchup penalty waived (all of it with enough games and no drop-off). His player note and the tough-matchup alert say so. Last season's weekly stats are downloaded once and cached for good.
+   - **W Feast (smash spots).** Projections tend to undersell a player facing one of the very easiest defenses for his position, so QBs, RBs, WRs and TEs facing the 3 easiest (`easy_matchup_ranks`) get an extra boost on top: up to 30% (`easy_matchup_boost`) against the easiest, two thirds of that against the 2nd-easiest and one third against the 3rd, scaled down early in the season when the defense has played only a few games. A lower-projected player in a smash spot can now win a slot over a higher-projected one, and a smash-spot player left on the bench within 3 points (`smash_alert_gap`) of a starter he could replace gets a **Your call** alert. On the page these are labeled **W Feast** and the player note shows in green.
+   - **Players who handle tough defenses.** For each skill player, his points against the toughest third of defenses are compared with his points against everyone else, using this season plus last season (`history_seasons`). Most players drop off against tough defenses; one who drops off less than is typical for his position, or not at all, gets part of a tough-matchup penalty waived (all of it with enough games and no drop-off). His player note (in darker orange on the page) and the tough-matchup alert say so. Last season's weekly stats are downloaded once and cached for good.
 3. **Availability.** Players on BYE or listed Out, IR, PUP or suspended are excluded. Doubtful players count at 25%, and Questionable players count in full but get flagged.
 4. **Filling slots.** Fixed positions are filled first, then FLEX, then Superflex, each with the best available player. IDP slots (DL, LB, DB and IDP flex) are filled the same way; a defender Sleeper lists at two spots (DL and LB) can fill either. A defender with no Sleeper projection uses his season average in that league's scoring, and his matchup is how many IDP points the offense he faces gives up to his position. IR and taxi slots are left alone.
 5. **Locked games.** Once a player's game kicks off, he stays where he is, and the page shows his real points (LIVE or FINAL).
