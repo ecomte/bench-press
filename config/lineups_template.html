@@ -110,7 +110,7 @@ h1 a:hover{text-decoration:underline;text-decoration-color:var(--accent);text-un
 .who .rp{font-size:12px;color:var(--accent);margin-top:2px}
 .who .as{font-size:12px;color:var(--call);margin-top:2px}
 .who .as.dim{color:var(--dim)}
-.asnote{margin:-6px 0 0;font-size:13px;color:var(--muted);border-left:3px solid var(--call);padding:6px 12px;background:var(--panel);border-radius:6px}
+.asnote{margin:10px 0 0;font-size:13px;color:var(--muted);border-left:3px solid var(--call);padding:6px 12px;background:var(--panel);border-radius:6px}
 .asnote b{color:var(--call);font-weight:600}
 .inj{display:inline-block;font:700 10px/16px var(--body);padding:0 5px;border-radius:4px;margin-left:6px;vertical-align:2px;background:var(--bad);color:#fff}
 .inj.Q{background:var(--warn);color:#1a1405}
@@ -330,11 +330,6 @@ function render() {
     '<div class="note">' + (o && o.subs_in && o.subs_in.length ? '<span style="color:var(--call)">⇄ ' + esc(o.team) + ' total counts auto-sub ' + o.subs_in.map(esc).join(", ") + '.</span> ' : '') +
     (over ? 'Final scores: green won, red lost. ' : started ? 'Green totals are real points so far; "proj" adds projections for players yet to play and for what\'s left of games in progress. ' : '') + 'Recommended ' + L.proj_rec.toFixed(1) + ' (adj) · Sleeper-only best ' + L.proj_rec_sleeper.toFixed(1) +
     ' · Your current lineup ' + L.proj_cur.toFixed(1) + ' (Sleeper proj)</div></div>';
-  if (L.auto_subs) {
-    h += '<p class="asnote"><b>⇄ Auto-subs aren\'t counted here.</b> This league allows auto-subs, but Sleeper doesn\'t currently share ' +
-      'auto-sub picks or their points with outside apps, so Bench Press can\'t see them. If a starter sits and his auto-sub ' +
-      'steps in, on your team or your opponent\'s, the Sleeper app\'s score will be higher than the totals above.</p>';
-  }
   h += '<div class="seg" role="group">' + MODES.map(m => '<button data-m="' + m[0] + '" aria-pressed="' + (mode === m[0]) + '">' + m[1] + '</button>').join("") + '</div>';
   if (L.alerts.length) {
     const lv = {bad: "Fix", change: "Swap", warn: "Watch", call: "Your call", info: "Note"};
@@ -362,6 +357,12 @@ function render() {
       autosub: p && subOf[p.id]});
   });
   h += '</div>';
+  // under the starters, where a missing auto-sub would change the score
+  if (L.auto_subs) {
+    h += '<p class="asnote"><b>⇄ Auto-subs aren\'t counted here.</b> This league allows auto-subs, but Sleeper doesn\'t currently share ' +
+      'auto-sub picks or their points with outside apps, so Bench Press can\'t see them. If a starter sits and his auto-sub ' +
+      'steps in, on your team or your opponent\'s, the Sleeper app\'s score will be higher than the one shown here.</p>';
+  }
   const pool = {};
   L.bench.forEach(p => pool[p.id] = p);
   L.lineup.forEach(s => ["rec", "cur", "sleeper"].forEach(k => { if (s[k]) pool[s[k].id] = s[k]; }));
@@ -378,7 +379,7 @@ function render() {
     '<span style="color:var(--good)">W Feast</span> spots (the 3 easiest defenses vs a position) get an extra boost on top, and <span style="color:var(--hold)">players who\'ve handled tough defenses</span> better than most get part of a tough-matchup penalty waived; the player notes say when. ' +
     'Matchup tag: <span class="mu tough">red = top-8 toughest</span> <span class="mu easy">green = top-8 easiest</span>. ' +
     'Orange rows are changes from your current Sleeper lineup. <span style="color:var(--good)">Green numbers</span> are real points from games already played (FINAL) or in progress (LIVE), with the projection underneath. Those players are locked, so they\'re never moved. ' +
-    '<span style="color:var(--call)">⇄ Auto-sub</span> lines show the bench player you picked in Sleeper to cover a starter: if the starter doesn\'t play, the sub\'s points count, and the totals include that.</p>';
+    '<span style="color:var(--call)">⇄ Auto-sub</span> lines show the bench player you picked in Sleeper to cover a starter: if the starter doesn\'t play, the sub\'s points count, and the totals include that. Sleeper\'s API doesn\'t share auto-sub picks with outside apps yet, so these lines won\'t show up until it does.</p>';
   $("#panel").innerHTML = h;
   document.querySelectorAll(".seg button").forEach(b => b.onclick = () => { mode = b.dataset.m; store.set("mode", mode); render(); });
   $("#foot").textContent = "Read-only: Sleeper's API can't change lineups, so make swaps in the app" +
