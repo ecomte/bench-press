@@ -14,7 +14,7 @@
   --bg:#10151f; --panel:#18202f; --row:#1d2738; --row2:#222d40; --line:#2a3548;
   --ink:#eef2f8; --muted:#8f9bb0; --dim:#5e6a80;
   --accent:#f2a33a; --accent-ink:#1a1206;
-  --good:#3ccf8e; --bad:#ff5c6c; --warn:#f5c64a; --hold:#e8772e; --call:#b48cff; --info:#5fb3ff;
+  --good:#3ccf8e; --bad:#ff5c6c; --warn:#f5c64a; --hold:#e8772e; --call:#b48cff; --info:#5fb3ff; --return:#2dd4bf;
   --qb:#fc2b6d; --rb:#20ceb8; --wr:#56c9f8; --te:#feae58; --k:#c96cff; --def:#bf755d;
   --dl:#e5785a; --lb:#8fbf4d; --db:#6f8cff;
   --display:"Big Shoulders Display",Impact,"Arial Narrow",sans-serif;
@@ -82,10 +82,10 @@ h1 a:hover{text-decoration:underline;text-decoration-color:var(--accent);text-un
 .alerts{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
 .alerts li{background:var(--panel);border-left:3px solid var(--info);border-radius:6px;padding:8px 12px;font-size:14px}
 .alerts li.bad{border-color:var(--bad)} .alerts li.change{border-color:var(--accent)} .alerts li.warn{border-color:var(--warn)}
-.alerts li.call{border-color:var(--call)} .alerts li.info{border-color:var(--info)}
+.alerts li.call{border-color:var(--call)} .alerts li.info{border-color:var(--info)} .alerts li.return{border-color:var(--return)}
 .alerts .lv{font:700 10px var(--mono);letter-spacing:.06em;text-transform:uppercase;margin-right:8px}
 .alerts li.bad .lv{color:var(--bad)} .alerts li.change .lv{color:var(--accent)} .alerts li.warn .lv{color:var(--warn)}
-.alerts li.call .lv{color:var(--call)} .alerts li.info .lv{color:var(--info)}
+.alerts li.call .lv{color:var(--call)} .alerts li.info .lv{color:var(--info)} .alerts li.return .lv{color:var(--return)}
 .sect{font:700 12px var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin:6px 0 -8px;display:flex;justify-content:space-between}
 .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;overflow:hidden}
 .prow{display:grid;grid-template-columns:46px 40px minmax(0,1fr) auto;gap:12px;align-items:center;padding:10px 14px;border-bottom:1px solid var(--line)}
@@ -335,8 +335,8 @@ function render() {
     ' · Your current lineup ' + L.proj_cur.toFixed(1) + ' (Sleeper proj)</div></div>';
   h += '<div class="seg" role="group">' + MODES.map(m => '<button data-m="' + m[0] + '" aria-pressed="' + (mode === m[0]) + '">' + m[1] + '</button>').join("") + '</div>';
   if (L.alerts.length) {
-    const lv = {bad: "Fix", change: "Swap", warn: "Watch", call: "Your call", info: "Note"};
-    const order = {bad: 0, change: 1, warn: 2, call: 3, info: 4};
+    const lv = {bad: "Fix", change: "Swap", warn: "Watch", return: "Return watch", call: "Your call", info: "Note"};
+    const order = {bad: 0, change: 1, warn: 2, return: 3, call: 4, info: 5};
     h += '<ul class="alerts">' + L.alerts.slice().sort((a, b) => order[a.level] - order[b.level])
       .map(a => '<li class="' + a.level + '"><span class="lv">' + lv[a.level] + '</span>' + esc(a.text) + '</li>').join("") + '</ul>';
   } else {
@@ -362,9 +362,10 @@ function render() {
   h += '</div>';
   // under the starters, where a missing auto-sub would change the score
   if (L.auto_subs) {
-    h += '<p class="asnote"><b>⇄ Auto-subs aren\'t counted here.</b> This league allows auto-subs, but Sleeper doesn\'t currently share ' +
-      'auto-sub picks or their points with outside apps, so Bench Press can\'t see them. If a starter sits and his auto-sub ' +
-      'steps in, on your team or your opponent\'s, the Sleeper app\'s score will be higher than the one shown here.</p>';
+    h += '<p class="asnote"><b>⇄ Auto-subs show up late here.</b> This league allows auto-subs, but Sleeper doesn\'t currently share ' +
+      'auto-sub picks with outside apps ahead of time. It only swaps the sub into the lineup data after the starter\'s game, and ' +
+      'Bench Press counts him from then on. Until that swap, if a starter sits and his auto-sub steps in, on your team or your ' +
+      'opponent\'s, the Sleeper app\'s score will be higher than the one shown here.</p>';
   }
   const pool = {};
   L.bench.forEach(p => pool[p.id] = p);
@@ -381,8 +382,9 @@ function render() {
     (DATA.matchup_weight * 100).toFixed(0) + '% of the way toward what the opposing defense usually gives up to that position. ' +
     '<span style="color:var(--good)">W Feast</span> spots (the 3 easiest defenses vs a position) get an extra boost on top, and <span style="color:var(--hold)">players who\'ve handled tough defenses</span> better than most get part of a tough-matchup penalty waived; the player notes say when. ' +
     'Matchup tag: <span class="mu tough">red = top-8 toughest</span> <span class="mu easy">green = top-8 easiest</span>. ' +
+    '<span style="color:var(--return)">Return watch</span> flags a bench or IR player who is Out right now but still has a Sleeper projection higher than one of your starters, so he may be cleared by kickoff. ' +
     'Orange rows are changes from your current Sleeper lineup. <span style="color:var(--good)">Green numbers</span> are real points from games already played (FINAL) or in progress (LIVE), with the projection underneath. Those players are locked, so they\'re never moved. ' +
-    '<span style="color:var(--call)">⇄ Auto-sub</span> lines show the bench player you picked in Sleeper to cover a starter: if the starter doesn\'t play, the sub\'s points count, and the totals include that. Sleeper\'s API doesn\'t share auto-sub picks with outside apps yet, so these lines won\'t show up until it does.</p>';
+    'Auto-subs: Sleeper doesn\'t flag them for outside apps. After a starter\'s game, Sleeper swaps the auto-sub into the lineup, and from then on the sub simply shows up here as a regular starter in that slot, with the points counted.</p>';
   $("#panel").innerHTML = h;
   document.querySelectorAll(".seg button").forEach(b => b.onclick = () => { mode = b.dataset.m; store.set("mode", mode); render(); });
   $("#foot").textContent = "Read-only: Sleeper's API can't change lineups, so make swaps in the app" +

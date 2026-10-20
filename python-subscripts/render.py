@@ -40,7 +40,7 @@ def report_md(d, dvp):
         L.append("")
         if lg["alerts"]:
             for a in lg["alerts"]:
-                icon = {"bad": "🔴", "change": "🔁", "warn": "🟡", "call": "⚖️", "info": "ℹ️"}.get(a["level"], "-")
+                icon = {"bad": "🔴", "change": "🔁", "warn": "🟡", "return": "🩹", "call": "⚖️", "info": "ℹ️"}.get(a["level"], "-")
                 L.append("- %s %s" % (icon, a["text"]))
             L.append("")
         L.append("| Slot | Recommended | Opp | Matchup | Adj | Sleeper | Season avg | Currently in Sleeper |")

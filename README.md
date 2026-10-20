@@ -1,6 +1,6 @@
 # Bench Press
 
-[![Release](https://img.shields.io/badge/release-v1.4.2-green)](https://github.com/ecomte/bench-press/releases)
+[![Release](https://img.shields.io/badge/release-v1.5.0-green)](https://github.com/ecomte/bench-press/releases)
 
 **Open Bench Press: [ecomte.github.io/bench-press](https://ecomte.github.io/bench-press/)**. Search your Sleeper username to see your lineups.
 
@@ -23,6 +23,7 @@ This repository is the GitHub version of Bench Press. It began as a set of scrip
 | 1.4.0 | Week buttons, green/red final scores and bye-only gray rows (BP-15), a 5-season tough-defense check and a notice that Sleeper doesn't share auto-subs (BP-14), and generated output and stats history moved under data/ (BP-16). |
 | 1.4.1 | Patch for favicon addition (BP-18). |
 | 1.4.2 | Patch for favicon in landing page and slight wording fix (BP-19). |
+| 1.5.0 | Return watch alert for Out players still projected over a starter (BP-20), and auto-sub notes reworded now that Sleeper is known to swap the sub in after the starter's game. |
 
 Release notes for each version are on the [Releases page](https://github.com/ecomte/bench-press/releases). The original design and trade-offs are in [docs/static-site-plan.md](docs/static-site-plan.md).
 
@@ -82,9 +83,11 @@ The first run takes about 20 seconds, because it downloads Sleeper's 5 MB player
 3. **Availability.** Players on BYE or listed Out, IR, PUP or suspended are excluded. Doubtful players count at 25%, and Questionable players count in full but get flagged.
 4. **Filling slots.** Fixed positions are filled first, then FLEX, then Superflex, each with the best available player. IDP slots (DL, LB, DB and IDP flex) are filled the same way; a defender Sleeper lists at two spots (DL and LB) can fill either. A defender with no Sleeper projection uses his season average in that league's scoring, and his matchup is how many IDP points the offense he faces gives up to his position. IR and taxi slots are left alone.
 5. **Locked games.** Once a player's game kicks off, he stays where he is, and the page shows his real points (LIVE or FINAL).
-6. **Auto-subs.** Sleeper's public API shows whether a league allows auto-subs (`max_subs` in the league settings) but not which player anyone picked, and its matchup points leave the sub's score out (checked 2026-10-19 with `tools/autosub_probe.py`). So in those leagues the page shows a note under the scoreboard that auto-subs aren't counted and the Sleeper app's score can be higher. The auto-sub display and scoring code (`auto_subs()` in `analysis.py`, same in `web/benchpress.js`) is in place and kicks in if Sleeper ever adds the picks to the API; `AUTO_SUB_KEYS` is where to point it.
+6. **Auto-subs.** Sleeper's public API shows whether a league allows auto-subs (`max_subs` in the league settings) but not which player anyone picked, and its matchup points leave the sub's score out until the swap happens. After the starter's game, Sleeper swaps the sub into the matchup's `starters` and `starters_points`, and `points` includes him (checked with `tools/autosub_probe.py`: on 2026-10-19 before Monday night DJ Moore was still listed with 0.0; on 2026-10-20 Keon Coleman was in his slot and the total matched the app). Bench Press reads matchup starters for the opponent, so it picks the sub up once he's swapped in. So in those leagues the page shows a note under the starters that auto-subs show up late and the Sleeper app's score can be higher until the swap. The auto-sub display and scoring code (`auto_subs()` in `analysis.py`, same in `web/benchpress.js`) is in place and kicks in if Sleeper ever adds the picks to the API; `AUTO_SUB_KEYS` is where to point it.
 
-Alerts on the page are **Fix** (empty slot or an unavailable starter), **Swap** (the recommended changes), **Watch** (Questionable starters, with an earlier-game bench player to use as an auto-sub when there is one, or a starter whose QB is out), **Your call** (Sleeper's projections and the matchup data disagree, or a benched smash-spot player came close) and **Note** (tough matchups, early games, open IR spots, roster changes, auto-subs you've set). An auto-sub that is out, didn't play, or plays after its starter is a **Fix**; a Questionable starter with a working auto-sub moves from Watch to a Note.
+Alerts on the page are **Fix** (empty slot or an unavailable starter), **Swap** (the recommended changes), **Watch** (Questionable starters, with an earlier-game bench player to use as an auto-sub when there is one, or a starter whose QB is out), **Return watch** (a bench or IR player who is Out right now but whose Sleeper projection still beats a starter he could replace, so he may be cleared by kickoff; see below), **Your call** (Sleeper's projections and the matchup data disagree, or a benched smash-spot player came close) and **Note** (tough matchups, early games, open IR spots, roster changes, auto-subs you've set). An auto-sub that is out, didn't play, or plays after its starter is a **Fix**; a Questionable starter with a working auto-sub moves from Watch to a Note.
+
+**Return watch.** Sleeper zeroes the projection of a player it expects to sit, but keeps projecting one who is listed Out (or IR or PUP) early in the week and may still be cleared, like a star coming back from a short injury. When such a player on your bench or in your IR slot projects at least 5 points (`return_watch_min`) and more than the weakest starter he could replace, the page adds a teal **Return watch** alert naming that starter and the player's game day. The player still isn't in the recommended lineup while he's Out; if he's cleared, swap him in. Once his game starts the alert goes away.
 
 ## Configuration
 
@@ -96,6 +99,7 @@ Alerts on the page are **Fix** (empty slot or an unavailable starter), **Swap** 
 | `matchup_weight` | 0 means pure Sleeper projections, and 1 applies the full defense effect. Default is 0.5. |
 | `easy_matchup_boost`, `easy_matchup_ranks` | Smash-spot boost against the easiest defenses for a position (default 0.3, the 3 easiest). 0 turns it off. |
 | `smash_alert_gap` | A benched smash-spot player this many points or fewer behind a starter gets a Your call alert. Default is 3. |
+| `return_watch_min` | An Out (or IR) player needs at least this Sleeper projection, in league scoring, to get a Return watch alert. Default is 5. |
 | `history_seasons` | Past seasons used to find players who handle tough defenses. Default is 5; 0 uses this season only. |
 | `history_decay` | How much each season back counts in that check: 0.7 means last season's games count 0.7, the one before 0.49, and so on. Default is 0.7; 1 counts every season equally. |
 | `league_nicknames`, `league_order` | Tab names and order for the owner's leagues. |
@@ -130,7 +134,7 @@ All data comes from Sleeper, so names, IDs, injury tags and scoring match the ap
 
 - **Documented API** (`api.sleeper.app/v1`): users, leagues, rosters, matchups and players. No key is needed.
 - **Undocumented app endpoints** (`api.sleeper.com`): weekly stats, projections and the schedule. These are unofficial, so if they change, `python-subscripts/sleeper.py` is the only file to fix. Past seasons' weekly stats (for the tough-defense check) are saved in the repo under `data/history/stats/` by `python3 tools/stats_backfill.py`, run once on the Mac (Sleeper blocks the cloud); a season not saved there is downloaded from Sleeper instead.
-- **Auto-subs:** Sleeper doesn't document where it stores them. Bench Press checks the likely field names, which haven't been confirmed against live data yet; `python3 tools/autosub_probe.py` shows what your leagues return.
+- **Auto-subs:** Sleeper doesn't document where it stores them. The probe (`python3 tools/autosub_probe.py`) confirmed the picks aren't in the API ahead of time; Sleeper only swaps the sub into the matchup data after the starter's game.
 
 The API is read-only, so lineup changes are made in the Sleeper app.
 
