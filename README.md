@@ -1,6 +1,6 @@
 # Bench Press
 
-[![Release](https://img.shields.io/badge/release-v1.4.2-green)](https://github.com/ecomte/bench-press/releases)
+[![Release](https://img.shields.io/badge/release-v1.5.0-green)](https://github.com/ecomte/bench-press/releases)
 
 **Open Bench Press: [ecomte.github.io/bench-press](https://ecomte.github.io/bench-press/)**. Search your Sleeper username to see your lineups.
 
@@ -23,6 +23,7 @@ This repository is the GitHub version of Bench Press. It began as a set of scrip
 | 1.4.0 | Week buttons, green/red final scores and bye-only gray rows (BP-15), a 5-season tough-defense check and a notice that Sleeper doesn't share auto-subs (BP-14), and generated output and stats history moved under data/ (BP-16). |
 | 1.4.1 | Patch for favicon addition (BP-18). |
 | 1.4.2 | Patch for favicon in landing page and slight wording fix (BP-19). |
+| 1.5.0 | Return watch alert for Out players still projected over a starter (BP-20), and auto-sub notes reworded now that Sleeper is known to swap the sub in after the starter's game. |
 
 Release notes for each version are on the [Releases page](https://github.com/ecomte/bench-press/releases). The original design and trade-offs are in [docs/static-site-plan.md](docs/static-site-plan.md).
 
