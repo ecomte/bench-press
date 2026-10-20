@@ -1,6 +1,6 @@
 # Bench Press
 
-[![Release](https://img.shields.io/badge/release-v1.4.1-green)](https://github.com/ecomte/bench-press/releases)
+[![Release](https://img.shields.io/badge/release-v1.4.2-green)](https://github.com/ecomte/bench-press/releases)
 
 **Open Bench Press: [ecomte.github.io/bench-press](https://ecomte.github.io/bench-press/)**. Search your Sleeper username to see your lineups.
 
@@ -22,6 +22,7 @@ This repository is the GitHub version of Bench Press. It began as a set of scrip
 | 1.3.0 | Smash spots renamed W Feast with a green note, and tough-defense notes in darker orange (BP-12). |
 | 1.4.0 | Week buttons, green/red final scores and bye-only gray rows (BP-15), a 5-season tough-defense check and a notice that Sleeper doesn't share auto-subs (BP-14), and generated output and stats history moved under data/ (BP-16). |
 | 1.4.1 | Patch for favicon addition (BP-18). |
+| 1.4.2 | Patch for favicon in landing page and slight wording fix (BP-19). |
 
 Release notes for each version are on the [Releases page](https://github.com/ecomte/bench-press/releases). The original design and trade-offs are in [docs/static-site-plan.md](docs/static-site-plan.md).
 

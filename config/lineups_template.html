@@ -285,7 +285,7 @@ function render() {
   document.title = "Bench Press" + (DATA.owner ? " · " + DATA.owner : "");
   // a week picked with the week buttons says so, since it isn't the one being played now
   const cw = DATA.current_week || DATA.week;
-  $("#sub").textContent = "Built " + DATA.generated + " from Sleeper current season stats and " +
+  $("#sub").textContent = "Updated " + DATA.generated + " from Sleeper current season stats and " +
     (DATA.week < cw ? "week " + DATA.week + "'s results: the lineup you started and its final points."
       : DATA.week > cw ? "Sleeper's early projections for week " + DATA.week + ". Injuries are as of today."
       : "this week's projections.") +
