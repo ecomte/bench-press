@@ -6,28 +6,27 @@ each position, recommends a lineup per league, and flags byes, injuries and empt
 
 examples:
   python3 benchpress.py                next week with games left, for me (EComte)
-  python3 benchpress.py --open         same, then open lineups/lineups-ecomte.html in the browser
+  python3 benchpress.py --open         same, then open data/lineups/lineups-ecomte.html in the browser
   python3 benchpress.py -w 8           look ahead to week 8
-  python3 benchpress.py -u SomeFriend  run it for a friend -> lineups/lineups-somefriend.html
+  python3 benchpress.py -u SomeFriend  run it for a friend -> data/lineups/lineups-somefriend.html
   python3 benchpress.py -u SomeFriend -w 8 -o
   python3 batchbenchpress.py           me + every friend in config batch_users
   python3 benchpress.py --site site    also write site/<user>/index.html (the GitHub Pages copy)
 
-what it writes (in this folder):
-  lineups/lineups-<user>.html    tabbed lineup page, one tab per team (mine: lineups/lineups-ecomte.html)
-  reports/<season>_weekNN.md     weekly report: give this to Claude
-  sheets/*.csv                   QB/RB/WR/TE/K/DEF/IDP + DEF_vs_POS, shared by everyone
-                                 (rostered_by column says whose team each player is on)
-  sheets/<user>/                 that person's lineups.csv and game_log.csv
-  data/                          API cache, roster snapshot, artifact.html (phone copy)
-  <site>/<user>/index.html       with --site: the hosted page (loads photos from Sleeper's CDN)
-  (a friend's run uses lineups/lineups-<user>.html and reports/<user>/)
+what it writes (under data/ in this folder):
+  data/lineups/lineups-<user>.html  tabbed lineup page, one tab per team (mine: data/lineups/lineups-ecomte.html)
+  data/reports/<season>_weekNN.md   weekly report: give this to Claude
+  data/sheets/*.csv                 QB/RB/WR/TE/K/DEF/IDP + DEF_vs_POS, shared by everyone
+                                    (rostered_by column says whose team each player is on)
+  data/sheets/<user>/               that person's lineups.csv and game_log.csv
+  data/cache/, data/*.json          API cache and roster snapshots
+  <site>/<user>/index.html          with --site: the hosted page (loads photos from Sleeper's CDN)
+  (a friend's run uses data/lineups/lineups-<user>.html and data/reports/<user>/)
 
 after a run:
   - Make the swaps in the Sleeper app (the API is read-only).
-  - Phone: tell Claude "publish my lineups" to update
-    https://claude.ai/artifact/88VThYJeg3jj7zhtVWaGMm
-  - Deeper look: paste ANALYZE-PROMPT.md into a Claude chat.
+  - Phone: the GitHub Pages site (https://ecomte.github.io/bench-press/<user>/) rebuilds on its own schedule.
+  - Deeper look: paste docs/ANALYZE-PROMPT.md into a Claude chat.
 
 best times to run: Tue/Wed after waivers, and Sunday morning for late injury news.
 settings (username, league nicknames, tab order, matchup weight): config/config.json
@@ -46,12 +45,13 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HERE, "python-subscripts"))
 
 import analysis as A  # noqa: E402
+import history as H  # noqa: E402
 import sleeper as S  # noqa: E402
 
-SHEETS = os.path.join(HERE, "sheets")
-REPORTS = os.path.join(HERE, "reports")
-DATA = os.path.join(HERE, "data")
-LINEUPS = os.path.join(HERE, "lineups")  # local lineup pages, one per person
+DATA = os.path.join(HERE, "data")  # everything a run writes; only data/history/ is tracked by git
+SHEETS = os.path.join(DATA, "sheets")
+REPORTS = os.path.join(DATA, "reports")
+LINEUPS = os.path.join(DATA, "lineups")  # local lineup pages, one per person
 
 
 def load_config():
@@ -91,10 +91,9 @@ def main():
                     help="open the lineup page in your browser when done")
     ap.add_argument("-u", "--user", metavar="USERNAME",
                     help="run for a different Sleeper username, e.g. a friend (a leading @ is fine). "
-                         "Output goes to lineups/lineups-<username>.html, reports/<username>/ and sheets/<username>/")
+                         "Output goes to data/lineups/lineups-<username>.html, data/reports/<username>/ and data/sheets/<username>/")
     ap.add_argument("--site", metavar="DIR",
-                    help="also write the page to DIR/<username>/index.html for the hosted site, and skip the "
-                         "photo-embedded claude.ai copy (the hosted page loads photos from Sleeper's CDN)")
+                    help="also write the page to DIR/<username>/index.html for the hosted site")
     args = ap.parse_args()
 
     cfg = load_config()
@@ -103,7 +102,8 @@ def main():
     EASY = float(cfg.get("easy_matchup_boost", 0.30))
     EASY_RANKS = int(cfg.get("easy_matchup_ranks", 3))
     SMASH_GAP = float(cfg.get("smash_alert_gap", 3.0))  # flag a benched smash spot this close to a starter
-    HISTORY = int(cfg.get("history_seasons", 1))  # past seasons used to spot players who beat tough defenses
+    HISTORY = int(cfg.get("history_seasons", 5))  # past seasons used to spot players who beat tough defenses
+    DECAY = float(cfg.get("history_decay", 0.7))  # each season back counts this much less (0.7, 0.49, ...)
     nick = cfg.get("league_nicknames", {}) if not (args.user and args.user.lstrip("@").lower() != cfg["username"].lower()) else {}
     now = dt.datetime.now()
 
@@ -120,18 +120,19 @@ def main():
         sys.exit("Couldn't find Sleeper user %r" % uname)
     tag = me.get("username") or uname.lower()
     tag = tag.lower()
-    # Position sheets + DEF_vs_POS are shared by everyone (sheets/); lineups and game log are per person.
-    SHEETS = os.path.join(HERE, "sheets")
+    # Position sheets + DEF_vs_POS are shared by everyone (data/sheets/); lineups and game log are per person.
     USER_SHEETS = os.path.join(SHEETS, tag)
-    REPORTS = os.path.join(HERE, "reports", tag) if other else os.path.join(HERE, "reports")
+    REPORTS = os.path.join(DATA, "reports", tag) if other else os.path.join(DATA, "reports")
     if other:
-        print("Running for %s (not you): output goes to lineups/lineups-%s.html" % (me.get("display_name") or uname, tag))
+        print("Running for %s (not you): output goes to data/lineups/lineups-%s.html" % (me.get("display_name") or uname, tag))
     user_id = me["user_id"]
     state = S.nfl_state() or {}
     season = str(cfg.get("season") or state.get("league_season") or state.get("season"))
     sched_raw = S.schedule(season)
     sched = A.Schedule(sched_raw)
-    week = args.week or sched.target_week()
+    current_week = sched.target_week()
+    week = args.week or current_week
+    other_week = week != current_week  # -w for a week other than the one being played now
     print("Season %s, setting lineups for week %d" % (season, week))
 
     # ---- shared data ----------------------------------------------------------------
@@ -168,26 +169,39 @@ def main():
         for row in dvp.get(pos, {}).values():
             row["easy"] = A.easy_bonus(row, EASY, EASY_RANKS)
 
-    # Past seasons (finished, so cached for good) give players enough games against tough defenses
-    # to tell who holds up against them. Each season's toughness ranks come from that season.
-    log_sets = [logs]
+    # Past seasons give players enough games against tough defenses to tell who holds up against
+    # them. They come from data/history/stats/ in the repo (tools/stats_backfill.py), or from Sleeper
+    # for a season not saved there yet. Each season's toughness ranks come from that season, and
+    # older seasons count less.
+    log_sets, weights, hist_meta = [logs], [1.0], {}
     for back in range(1, HISTORY + 1):
-        past = {}
-        for w in range(1, 19):
-            try:
-                rows = S.week_stats(str(int(season) - back), w, final=True)
-            except Exception:
-                break
-            if rows:
-                past[w] = rows
+        past_season = str(int(season) - back)
+        past = H.load(past_season)
+        if not past:
+            for w in range(1, 19):
+                try:
+                    rows = S.week_stats(past_season, w, final=True)
+                except Exception:
+                    break
+                if rows:
+                    past[w] = rows
         if past:
-            log_sets.append(A.build_player_logs(past, A.defense_vs_position(past))[0])
-            print("History: %s season, %d weeks" % (int(season) - back, len(past)))
-    tough = A.tough_profile(log_sets, {pid: players.get(pid) or meta.get(pid) for pid in set().union(*log_sets)})
+            past_logs, past_meta = A.build_player_logs(past, A.defense_vs_position(past))
+            log_sets.append(past_logs)
+            weights.append(DECAY ** back)
+            for pid, m in past_meta.items():
+                hist_meta.setdefault(pid, m)
+            print("History: %s season, %d weeks (weight %.2f)" % (past_season, len(past), DECAY ** back))
+    tough = A.tough_profile(log_sets, {pid: players.get(pid) or meta.get(pid) or hist_meta.get(pid)
+                                       for pid in set().union(*log_sets)}, weights=weights)
+    # only players still in the league can be in a lineup, so retired ones stay out of the site data
+    tough = {pid: row for pid, row in tough.items() if (players.get(pid) or {}).get("team")}
     inj = A.team_injuries(players)
     byes_now = sched.byes(week)
 
-    def injury_of(pid):
+    def injury_of(pid, gstate=None):
+        if other_week and gstate == "final":
+            return ""  # today's injury doesn't apply to a game already played
         pr = proj.get(pid)
         if pr and pr.get("player") is not None:
             return (pr["player"].get("injury_status") or "")
@@ -224,14 +238,18 @@ def main():
             continue
         roster_ids = {r["roster_id"]: r for r in rosters}
 
-        all_pids = [p for p in (mine.get("players") or []) if p]
+        mu = S.matchups(lid, week)
+        mine_mu = next((m for m in mu if m.get("roster_id") == mine["roster_id"]), None)
+        # another week: the roster and starters Sleeper kept for that week (a past week shows who you really started)
+        week_mu = mine_mu if other_week else None
+        all_pids = [p for p in ((week_mu if week_mu and week_mu.get("players") else mine).get("players") or []) if p]
         reserve = set(mine.get("reserve") or [])
         taxi = set(mine.get("taxi") or [])
         for pid in all_pids:
             owned.setdefault(pid, []).append(short)
 
-        # roster changes since last run
-        prev = set(old_snap.get(lid, []))
+        # roster changes since last run (only tracked for the week being played)
+        prev = set() if other_week else set(old_snap.get(lid, []))
         added = [p for p in all_pids if prev and p not in prev]
         dropped = [p for p in prev if p not in set(all_pids)]
         new_snap[lid] = all_pids
@@ -241,9 +259,9 @@ def main():
             pos = A.player_pos(pl) or ("DEF" if pid.isalpha() else "?")
             team = pid if pos == "DEF" else (pl.get("team") or "")
             pr = proj.get(pid)
-            status = injury_of(pid)
             game = sched.game(week, team) if team else None
             gstate = A.game_state(game, today)
+            status = injury_of(pid, gstate)
             locked = gstate in ("live", "final")
             actual = A.score(live_stats[pid], ss) if (locked and pid in live_stats) else (0.0 if locked else None)
             sleeper_pts = A.score((pr or {}).get("stats"), ss)
@@ -279,8 +297,7 @@ def main():
             if easy and sleeper_pts:
                 notes.append("W Feast: %s, projection boosted %+d%%" % (A.matchup_text(pos, row), round(100 * (W * (mult - 1) + easy))))
             if tp and row and row["mult"] < 1:
-                notes.append("Handles tough Ds better than most %ss: %.1f a game vs top-third defenses (%d games), %.1f otherwise" % (
-                    pos, tp["avg_tough"], tp["g_tough"], tp["avg_other"]))
+                notes.append("Handles tough Ds better than most %ss" % pos)
             return {
                 "id": pid, "name": A.player_name(pid, pl) if pos != "DEF" else (pl.get("first_name", pid) + " " + pl.get("last_name", "")).strip(),
                 "pos": pos, "fpos": A.player_fpos(pl, pos), "team": team, "status": status,
@@ -307,7 +324,8 @@ def main():
         for p in startable.values():
             p["value_adj"] = p["adj"] if p["available"] else -1
             p["value_sleeper"] = p["sleeper"] if p["available"] else -1
-        cur = list(mine.get("starters") or [])
+        set_starters = week_mu and any(x and x != "0" for x in (week_mu.get("starters") or []))
+        cur = list((week_mu if set_starters else mine).get("starters") or [])
         cur += [None] * (len(slots) - len(cur))
         # players whose game has started can't move: starters stay put, bench stays benched
         preset = [c if (c and c != "0" and c in pool and pool[c]["locked"]) else None for c in cur]
@@ -324,8 +342,6 @@ def main():
         cur_set = set(x for x in cur if x and x != "0")
 
         # ---- auto-subs: {starter: bench player whose points count if the starter doesn't play} ----
-        mu = S.matchups(lid, week)
-        mine_mu = next((m for m in mu if m.get("roster_id") == mine["roster_id"]), None)
         subs = {a: b for a, b in A.auto_subs(mine_mu, mine).items() if a in cur_set and b in pool and b not in cur_set}
 
         def pts(p, key):  # projected final: real points so far plus the projection for what's left of the game
@@ -444,8 +460,7 @@ def main():
             if p and p["rank"] and p["rank"] <= 3 and p["pos"] != "DEF":
                 tp = tough.get(p["id"]) if p["hold"] else None
                 alerts.append({"level": "info", "text": "%s faces %s (%s).%s" % (p["name"], p["opp"], p["matchup"], (
-                    " He's handled tough defenses better than most (%.1f a game vs the top third, %.1f otherwise), so the matchup counts against him less."
-                    % (tp["avg_tough"], tp["avg_other"])) if tp else "")})
+                    " He handles tough defenses better than most, so the matchup counts against him less.") if tp else "")})
             if p and any(n.startswith("His QB") for n in p["notes"]):
                 alerts.append({"level": "warn", "text": "%s: %s" % (p["name"], [n for n in p["notes"] if n.startswith("His QB")][0])})
         early = [P(x) for x in rec if x and not P(x)["locked"] and P(x)["day"] in ("Thu", "Fri", "Wed")]
@@ -479,25 +494,47 @@ def main():
                 o_proj = 0.0
                 o_live = 0.0  # real points so far from their starters whose games have started
                 o_started = False
-                for pid in o.get("starters") or []:
-                    if pid and pid != "0":
-                        opl = players.get(pid) or {}
-                        oteam = pid if pid.isalpha() else opl.get("team")
-                        ogame = sched.game(week, oteam)
-                        ostate = A.game_state(ogame, today)
-                        if ostate in ("live", "final"):
-                            o_now = A.score(live_stats.get(pid, {}), ss)
-                            o_proj += o_now + A.score((proj.get(pid) or {}).get("stats"), ss) * A.game_left(ogame, ostate, now_et)
-                            o_live += o_now
-                            o_started = True
-                        else:
-                            o_proj += A.score((proj.get(pid) or {}).get("stats"), ss)
+
+                def opp_player(pid):
+                    """(projected final, real points so far, game started, sub_state fields) for one of their players."""
+                    opl = players.get(pid) or {}
+                    oteam = pid if pid.isalpha() else opl.get("team")
+                    ogame = sched.game(week, oteam) if oteam else None
+                    ostate = A.game_state(ogame, today)
+                    pj = A.score((proj.get(pid) or {}).get("stats"), ss)
+                    locked = ostate in ("live", "final")
+                    stats = live_stats.get(pid) or {}
+                    st = injury_of(pid, ostate)
+                    fields = {"locked": locked, "game_state": ostate, "status": st,
+                              "available": bool(ogame) and st not in A.OUT_STATUSES,
+                              "played": locked and (A.played({"stats": stats, "player_id": pid}) or A.num(stats.get("gms_active")) > 0)}
+                    if locked:
+                        now_pts = A.score(stats, ss)
+                        return now_pts + pj * A.game_left(ogame, ostate, now_et), now_pts, True, fields
+                    return pj, 0.0, False, fields
+
+                # their auto-subs count once it's clear the starter isn't playing (same rule as for you)
+                o_starters = [x for x in (o.get("starters") or []) if x and x != "0"]
+                o_subs = {a: b for a, b in A.auto_subs(o, oro).items() if a in o_starters and b not in o_starters}
+                o_subs_in = []
+                for pid in o_starters:
+                    pj, now_pts, began, fields = opp_player(pid)
+                    if pid in o_subs and A.sub_state(fields) == "in":
+                        pj, now_pts, sub_began, sub_fields = opp_player(o_subs[pid])
+                        if not A.sub_can_score(sub_fields):
+                            pj = now_pts = 0.0
+                        began = began or sub_began
+                        o_subs_in.append("%s for %s" % (A.player_name(o_subs[pid], players.get(o_subs[pid])), A.player_name(pid, players.get(pid))))
+                    o_proj += pj
+                    o_live += now_pts
+                    o_started = o_started or began
                 ost = oro.get("settings") or {}
                 opp_info = {
                     "team": (ou.get("metadata") or {}).get("team_name") or ou.get("display_name") or "Opponent",
                     "owner": ou.get("display_name", ""),
                     "proj": round(o_proj, 1),
                     "live": round(o_live, 1), "started": o_started,
+                    "subs_in": o_subs_in,
                     "record": "%d-%d" % (ost.get("wins", 0), ost.get("losses", 0)),
                 }
         st = mine.get("settings") or {}
@@ -507,7 +544,9 @@ def main():
             "team_name": (me_u.get("metadata") or {}).get("team_name") or me_u.get("display_name") or "",
             "record": "%d-%d%s" % (st.get("wins", 0), st.get("losses", 0), ("-%d" % st["ties"]) if st.get("ties") else ""),
             "pf": round(num(st.get("fpts")) + num(st.get("fpts_decimal")) / 100, 1),
-            "lineup": lineup, "bench": bench, "stash": stash, "alerts": alerts, "opponent": opp_info,
+            # a past week can't be changed any more, so only its notes are kept
+            "lineup": lineup, "bench": bench, "stash": stash, "opponent": opp_info,
+            "alerts": [a for a in alerts if a["level"] == "info"] if week < current_week else alerts,
             # an auto-sub counts for its starter wherever that starter is still in the lineup
             "proj_rec": round(sum(slot_pts(x, "adj", rec_set) for x in rec if x), 1),
             "proj_rec_sleeper": round(sum(slot_pts(x, "sleeper", rec_set) for x in rec if x), 1),
@@ -516,11 +555,14 @@ def main():
             # real points so far; locked starters are the same in every lineup view
             "live_pts": round(sum(slot_live(x) for x in cur if x and x != "0"), 1),
             "scoring": {k: ss.get(k) for k in ("rec", "pass_td", "bonus_rec_te", "pass_int", "fum_lost")},
+            # the league allows auto-subs, but Sleeper's API doesn't say who anyone picked
+            "auto_subs": num((lg.get("settings") or {}).get("max_subs")) > 0,
         })
 
     os.makedirs(DATA, exist_ok=True)
-    with open(snapshot_path, "w") as f:
-        json.dump(new_snap, f)
+    if not other_week:
+        with open(snapshot_path, "w") as f:
+            json.dump(new_snap, f)
 
     # ---- ownership: remember whose rosters each player is on (one file per person) ----------
     owned_dir = os.path.join(DATA, "owned")
@@ -684,8 +726,9 @@ def main():
         "generated": eastern_stamp(now),
         "owner": me.get("display_name") or uname, "is_me": not other,
         "sample": bool(os.environ.get("FF_FIXTURES")),
-        "user_sheets": "sheets/%s/" % tag,
+        "user_sheets": "data/sheets/%s/" % tag,
         "season": season, "week": week, "byes": byes_now, "matchup_weight": W,
+        "current_week": current_week, "weeks": sched.weeks(), "week_over": sched.week_complete(week),
         "stats_weeks": sorted(weekly), "leagues": out_leagues,
         "username": tag,
         "built_at": now.timestamp(),
@@ -718,16 +761,6 @@ def main():
         sitedata.write(args.site, cfg, season, week, W, players, sched_raw, proj_list, live_list,
                        sorted(weekly), dvp, logs, inj, scoring_keys, tough)
         print("Site:    %s" % os.path.join(site_dir, "index.html"))
-    else:
-        print("Player photos for the phone page...")
-        seen = {}
-        for L in out_leagues:
-            people = L["bench"] + L["stash"] + [s[k] for s in L["lineup"] for k in ("rec", "cur", "sleeper") if s[k]]
-            for p in people:
-                seen[p["id"]] = (p["id"], p["pos"], p["team"])
-        photos = S.headshots(list(seen.values()))
-        with open(os.path.join(DATA, "artifact%s.html" % (("_" + tag) if other else "")), "w") as f:
-            f.write(render.artifact_html(payload, photos))
 
     print("")
     for L in out_leagues:

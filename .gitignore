@@ -222,8 +222,7 @@ __marimo__/
 # macOS
 .DS_Store
 
-# Bench Press: generated output and API cache (rebuilt on every run)
-data/
-lineups/
-sheets/
-reports/
+# Bench Press: generated output and API cache (rebuilt on every run), all under data/.
+# data/history/ (past seasons' stats) is the exception: it's tracked, and the build needs it.
+/data/*
+!/data/history/

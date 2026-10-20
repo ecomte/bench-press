@@ -13,9 +13,6 @@ examples:
 
 Shared data (player list, weekly stats, projections) is downloaded on the first
 run and reused by the rest, so later users only take a few seconds each.
-
-after a run:
-  Tell Claude "publish everyone's lineups" (or name specific people) to update the phone links.
 """
 
 import argparse
@@ -70,8 +67,6 @@ def main():
     failed = [u for u, c, _ in results if c != 0]
     if failed:
         print("\nRe-run just the failed ones with:  python3 batchbenchpress.py " + " ".join(failed))
-    if not args.site:
-        print('\nPhone links: tell Claude "publish everyone\'s lineups".')
     sys.exit(1 if failed else 0)
 
 

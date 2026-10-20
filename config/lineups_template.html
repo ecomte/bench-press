@@ -39,6 +39,13 @@ h1 a:hover{text-decoration:underline;text-decoration-color:var(--accent);text-un
 @media (prefers-reduced-motion:reduce){.live button.spin svg{animation:none}}
 .live .msg{color:var(--muted);font-size:13px}
 .live .msg.err{color:var(--bad)}
+.weeks{display:grid;grid-template-columns:34px repeat(5,minmax(0,1fr)) 34px;gap:6px;margin-top:12px;max-width:440px}
+.weeks button{background:transparent;border:1px solid var(--line);color:var(--ink);border-radius:999px;padding:6px 0;font:600 13px var(--body);cursor:pointer;white-space:nowrap}
+.weeks button:hover:not(:disabled){border-color:var(--muted)}
+.weeks button:disabled{opacity:.35;cursor:default}
+.weeks .wk.now{border-color:var(--accent);color:var(--accent)}
+.weeks .wk[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.weeks .arrow{font:700 16px/1 var(--body);color:var(--muted)}
 .byes{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px;align-items:center;font:12px var(--mono);color:var(--muted)}
 .chip{font:500 12px var(--mono);border:1px solid var(--line);border-radius:999px;padding:2px 8px;color:var(--ink)}
 .tabs{display:flex;gap:6px;flex-wrap:wrap;border-bottom:1px solid var(--line);padding-bottom:12px}
@@ -55,6 +62,7 @@ h1 a:hover{text-decoration:underline;text-decoration-color:var(--accent);text-un
 .board .side .r{font:12px var(--mono);color:var(--muted)}
 .board .side .n{font:800 36px/1 var(--display)}
 .board .side .n.act{color:var(--good)}
+.board .side .n.win{color:var(--good)} .board .side .n.loss{color:var(--bad)}
 .board .side .pj{font:600 13px var(--mono);color:var(--muted);margin-top:4px}
 .board .side .gs{vertical-align:12px}
 .board .side.right{text-align:right}
@@ -102,6 +110,8 @@ h1 a:hover{text-decoration:underline;text-decoration-color:var(--accent);text-un
 .who .rp{font-size:12px;color:var(--accent);margin-top:2px}
 .who .as{font-size:12px;color:var(--call);margin-top:2px}
 .who .as.dim{color:var(--dim)}
+.asnote{margin:10px 0 0;font-size:13px;color:var(--muted);border-left:3px solid var(--call);padding:6px 12px;background:var(--panel);border-radius:6px}
+.asnote b{color:var(--call);font-weight:600}
 .inj{display:inline-block;font:700 10px/16px var(--body);padding:0 5px;border-radius:4px;margin-left:6px;vertical-align:2px;background:var(--bad);color:#fff}
 .inj.Q{background:var(--warn);color:#1a1405}
 .inj.BYE{background:var(--dim)}
@@ -139,6 +149,7 @@ footer{font-size:12px;color:var(--dim);border-top:1px solid var(--line);padding-
     <p class="tag">Let's eat a W.</p>
     <p class="sub" id="sub"></p>
     <div class="live" id="live" hidden><button id="refresh" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 0 1-15.5 6.2L3 16"/><path d="M3 21v-5h5"/><path d="M3 12a9 9 0 0 1 15.5-6.2L21 8"/><path d="M21 3v5h-5"/></svg><span>Refresh</span></button><span class="msg" id="liveMsg" role="status"></span></div>
+    <nav class="weeks" id="weeks" aria-label="Week" hidden></nav>
     <div class="byes" id="byes"></div>
   </header>
   <nav class="tabs" id="tabs" role="tablist"></nav>
@@ -154,8 +165,6 @@ footer{font-size:12px;color:var(--dim);border-top:1px solid var(--line);padding-
 <!--__LIVE__-->
 <script>
 let DATA = /*__DATA__*/null;
-const NO_IMG = /*__NOIMG__*/false;
-const PHOTOS = /*__PHOTOS__*/{};
 const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const store = {
@@ -170,8 +179,6 @@ const MODES = [["rec", "Recommended"], ["sleeper", "Sleeper proj only"], ["cur",
 function initials(n) { return n.split(/\s+/).map(w => w[0]).join("").slice(0, 2).toUpperCase(); }
 function avatar(p) {
   if (!p) return '<div class="av">–</div>';
-  if (PHOTOS[p.id]) return '<div class="av">' + esc(initials(p.name)) + '<img alt="" src="' + PHOTOS[p.id] + '" onerror="this.remove()"></div>';
-  if (NO_IMG) return '<div class="av">' + esc(initials(p.name)) + '</div>';
   const src = p.pos === "DEF"
     ? "https://sleepercdn.com/images/team_logos/nfl/" + String(p.team).toLowerCase() + ".png"
     : "https://sleepercdn.com/content/nfl/players/thumb/" + p.id + ".jpg";
@@ -199,7 +206,8 @@ function row(slot, label, p, opts) {
   opts = opts || {};
   const cls = ["prow"];
   if (opts.changed) cls.push("changed");
-  if (p && !p.available && !(opts.autosub && opts.autosub.state === "in")) cls.push("off");
+  // gray out only players with no game in the week on screen (bye or no team); injured players keep their red tag instead
+  if (p && (p.why === "BYE" || !p.team) && !(opts.autosub && opts.autosub.state === "in")) cls.push("off");
   if (!p) {
     return '<div class="' + cls.join(" ") + '"><div class="slot ' + esc(slot) + '">' + esc(label) + '</div>' +
       avatar(null) + '<div class="who"><div class="nm" style="color:var(--bad)">Empty</div></div><div></div></div>';
@@ -272,7 +280,13 @@ function render() {
   $("#sample").hidden = !DATA.sample;
   $("#eyebrow").textContent = "Sleeper · " + (DATA.owner ? DATA.owner + " · " : "") + DATA.season + " · Week " + DATA.week;
   document.title = "Bench Press" + (DATA.owner ? " · " + DATA.owner : "");
-  $("#sub").textContent = "Built " + DATA.generated + " from Sleeper current season stats and this week's projections.";
+  // a week picked with the week buttons says so, since it isn't the one being played now
+  const cw = DATA.current_week || DATA.week;
+  $("#sub").textContent = "Built " + DATA.generated + " from Sleeper current season stats and " +
+    (DATA.week < cw ? "week " + DATA.week + "'s results: the lineup you started and its final points."
+      : DATA.week > cw ? "Sleeper's early projections for week " + DATA.week + ". Injuries are as of today."
+      : "this week's projections.") +
+    (DATA.no_proj && !DATA.week_over ? " Sleeper's week " + DATA.week + " projections didn't load on this device, so projected points show as 0." : "");
   $("#byes").innerHTML = "Byes: " + (DATA.byes.length ? DATA.byes.map(t => '<span class="chip">' + esc(t) + '</span>').join("") : "none");
   $("#tabs").innerHTML = DATA.leagues.map(l => {
     const n = l.alerts.filter(a => a.level === "bad" || a.level === "change").length;
@@ -290,12 +304,18 @@ function render() {
   // Once any game in the matchup has started, the big numbers are real points so far
   // and the projected final (real points + projections for players yet to play) sits underneath.
   const started = L.any_locked || !!(o && o.started);
-  const score = (live, proj) => started
+  // Once the week is over (or a past week is picked), the winner's final score is green and the loser's red.
+  const over = !!(DATA.week_over && o);
+  const myFinal = L.live_pts || 0, oFinal = o ? (o.live || 0) : 0;
+  const result = (mine) => !over || myFinal === oFinal ? "act" : (mine ? myFinal > oFinal : oFinal > myFinal) ? "win" : "loss";
+  const score = (live, proj, mine) => over
+    ? '<div class="n ' + result(mine) + '">' + (live || 0).toFixed(1) + '</div><div class="pj">final</div>'
+    : started
     ? '<div class="n act">' + (live || 0).toFixed(1) + '</div><div class="pj">proj ' + proj.toFixed(1) + '</div>'
     : '<div class="n">' + proj.toFixed(1) + '</div>';
-  h += '<div class="board"><div class="side"><div class="t">You</div>' + score(L.live_pts, myProj) + '<div class="r">' +
-    esc(MODES.find(m => m[0] === mode)[1].toLowerCase()) + '</div></div><div class="vs">' + (started ? '<span class="gs live">LIVE</span>' : '') + 'VS</div>' +
-    '<div class="side right"><div class="t">' + esc(o ? o.team : "No matchup") + '</div>' + (o ? score(o.live, o.proj) : '<div class="n">–</div>') +
+  h += '<div class="board"><div class="side"><div class="t">You</div>' + score(L.live_pts, myProj, true) + '<div class="r">' +
+    esc(MODES.find(m => m[0] === mode)[1].toLowerCase()) + '</div></div><div class="vs">' + (DATA.week_over ? '<span class="gs final">FINAL</span>' : started ? '<span class="gs live">LIVE</span>' : '') + 'VS</div>' +
+    '<div class="side right"><div class="t">' + esc(o ? o.team : "No matchup") + '</div>' + (o ? score(o.live, o.proj, false) : '<div class="n">–</div>') +
     '<div class="r">' + esc(o ? o.owner + " · " + o.record : "") + '</div></div>' +
     (o ? (() => {
       const p = winPct(started ? (L.live_pts || 0) : 0, myProj, started ? (o.live || 0) : 0, o.proj);
@@ -307,7 +327,8 @@ function render() {
         '<div class="' + mine + '" style="width:' + p.toFixed(1) + '%"></div><div class="' + theirs + '" style="width:' + (100 - p).toFixed(1) + '%"></div></div>' +
         '<span class="' + theirs + '">' + them + '%</span></div>';
     })() : '') +
-    '<div class="note">' + (started ? 'Green totals are real points so far; "proj" adds projections for players yet to play and for what\'s left of games in progress. ' : '') + 'Recommended ' + L.proj_rec.toFixed(1) + ' (adj) · Sleeper-only best ' + L.proj_rec_sleeper.toFixed(1) +
+    '<div class="note">' + (o && o.subs_in && o.subs_in.length ? '<span style="color:var(--call)">⇄ ' + esc(o.team) + ' total counts auto-sub ' + o.subs_in.map(esc).join(", ") + '.</span> ' : '') +
+    (over ? 'Final scores: green won, red lost. ' : started ? 'Green totals are real points so far; "proj" adds projections for players yet to play and for what\'s left of games in progress. ' : '') + 'Recommended ' + L.proj_rec.toFixed(1) + ' (adj) · Sleeper-only best ' + L.proj_rec_sleeper.toFixed(1) +
     ' · Your current lineup ' + L.proj_cur.toFixed(1) + ' (Sleeper proj)</div></div>';
   h += '<div class="seg" role="group">' + MODES.map(m => '<button data-m="' + m[0] + '" aria-pressed="' + (mode === m[0]) + '">' + m[1] + '</button>').join("") + '</div>';
   if (L.alerts.length) {
@@ -336,6 +357,12 @@ function render() {
       autosub: p && subOf[p.id]});
   });
   h += '</div>';
+  // under the starters, where a missing auto-sub would change the score
+  if (L.auto_subs) {
+    h += '<p class="asnote"><b>⇄ Auto-subs aren\'t counted here.</b> This league allows auto-subs, but Sleeper doesn\'t currently share ' +
+      'auto-sub picks or their points with outside apps, so Bench Press can\'t see them. If a starter sits and his auto-sub ' +
+      'steps in, on your team or your opponent\'s, the Sleeper app\'s score will be higher than the one shown here.</p>';
+  }
   const pool = {};
   L.bench.forEach(p => pool[p.id] = p);
   L.lineup.forEach(s => ["rec", "cur", "sleeper"].forEach(k => { if (s[k]) pool[s[k].id] = s[k]; }));
@@ -352,7 +379,7 @@ function render() {
     '<span style="color:var(--good)">W Feast</span> spots (the 3 easiest defenses vs a position) get an extra boost on top, and <span style="color:var(--hold)">players who\'ve handled tough defenses</span> better than most get part of a tough-matchup penalty waived; the player notes say when. ' +
     'Matchup tag: <span class="mu tough">red = top-8 toughest</span> <span class="mu easy">green = top-8 easiest</span>. ' +
     'Orange rows are changes from your current Sleeper lineup. <span style="color:var(--good)">Green numbers</span> are real points from games already played (FINAL) or in progress (LIVE), with the projection underneath. Those players are locked, so they\'re never moved. ' +
-    '<span style="color:var(--call)">⇄ Auto-sub</span> lines show the bench player you picked in Sleeper to cover a starter: if the starter doesn\'t play, the sub\'s points count, and the totals include that.</p>';
+    '<span style="color:var(--call)">⇄ Auto-sub</span> lines show the bench player you picked in Sleeper to cover a starter: if the starter doesn\'t play, the sub\'s points count, and the totals include that. Sleeper\'s API doesn\'t share auto-sub picks with outside apps yet, so these lines won\'t show up until it does.</p>';
   $("#panel").innerHTML = h;
   document.querySelectorAll(".seg button").forEach(b => b.onclick = () => { mode = b.dataset.m; store.set("mode", mode); render(); });
   $("#foot").textContent = "Read-only: Sleeper's API can't change lineups, so make swaps in the app" +
@@ -370,24 +397,58 @@ function setupRefresh() {
     getItem(k) { try { return localStorage.getItem(k); } catch (e) { return null; } },
     setItem(k, v) { try { localStorage.setItem(k, v); } catch (e) {} }
   };
+  // Week buttons: null means the week being played now. Only Refresh and the buttons change it,
+  // so Refresh stays on the picked week and reloading the page starts back on the current week.
+  let pick = null, winStart = null, seq = 0;
+  const weekList = () => (DATA.weeks && DATA.weeks.length ? DATA.weeks : Array.from({ length: 18 }, (_, i) => i + 1));
+  function renderWeeks() {
+    const el = $("#weeks");
+    if (DATA.placeholder || !DATA.week) { el.hidden = true; return; }
+    const ws = weekList(), cw = DATA.current_week || DATA.week, sel = pick || cw;
+    const first = ws[0], lastW = ws[ws.length - 1], span = Math.min(5, ws.length);
+    const clamp = (s) => Math.max(first, Math.min(lastW - span + 1, s));
+    // show the picked week with two on each side, unless the arrows moved the window away from it
+    if (winStart == null) winStart = clamp(sel - 2);
+    let h = '<button class="arrow" type="button" data-shift="-1" aria-label="Earlier weeks"' + (winStart <= first ? " disabled" : "") + '>‹</button>';
+    for (let w = winStart; w < winStart + span; w++) {
+      h += '<button class="wk' + (w === cw ? " now" : "") + '" type="button" data-w="' + w + '" aria-pressed="' + (w === sel) + '"' +
+        (w === cw ? ' title="This week"' : "") + '>Wk ' + w + '</button>';
+    }
+    h += '<button class="arrow" type="button" data-shift="1" aria-label="Later weeks"' + (winStart + span - 1 >= lastW ? " disabled" : "") + '>›</button>';
+    el.innerHTML = h;
+    el.hidden = false;
+    el.querySelectorAll(".arrow").forEach(b => b.onclick = () => { winStart = clamp(winStart + span * +b.dataset.shift); renderWeeks(); });
+    el.querySelectorAll(".wk").forEach(b => b.onclick = () => {
+      const w = +b.dataset.w;
+      if (w === sel && !btn.disabled) return;
+      pick = w === cw ? null : w;
+      renderWeeks();
+      refresh();
+    });
+  }
   async function refresh() {
     if (!DATA.username) return;
     last = Date.now();
+    const mine = ++seq, want = pick;  // a newer tap (another week) replaces this one
     const label = btn.querySelector("span");
     btn.disabled = true; btn.classList.add("spin"); label.textContent = "Refreshing...";
-    msg.className = "msg"; msg.textContent = "";
+    msg.className = "msg"; msg.textContent = want ? "Loading week " + want + "..." : "";
     try {
-      const d = await BenchPress.build({ username: DATA.username, base: new URL("..", location.href).href, storage });
+      const d = await BenchPress.build({ username: DATA.username, base: new URL("..", location.href).href, storage, week: want || undefined });
+      if (mine !== seq) return;
       DATA = d;
-      storage.setItem(lastKey, JSON.stringify(d));
+      // only the current week is kept for a page reload, which always opens on the current week
+      if (!want) storage.setItem(lastKey, JSON.stringify(d));
       if (!DATA.leagues.some(l => l.id === tab)) tab = DATA.leagues[0] && DATA.leagues[0].id;
       render();
       msg.textContent = "Live from Sleeper";
     } catch (e) {
+      if (mine !== seq) return;
+      pick = DATA.current_week && DATA.week !== DATA.current_week ? DATA.week : null;  // back to the week still on screen
       msg.className = "msg err";
       msg.textContent = "Couldn't refresh: " + (e && e.message ? e.message : e);
     } finally {
-      btn.disabled = false; btn.classList.remove("spin"); label.textContent = "Refresh";
+      if (mine === seq) { btn.disabled = false; btn.classList.remove("spin"); label.textContent = "Refresh"; renderWeeks(); }
     }
   }
   btn.onclick = refresh;
@@ -402,6 +463,7 @@ function setupRefresh() {
       render();
     }
   } catch (e) { /* nothing kept, or storage blocked */ }
+  renderWeeks();
   // The saved page can be up to an hour old (longer overnight), so new injuries and
   // lineup issues would only show after a tap. Pull live data as soon as the page opens,
   // and again when someone comes back to a tab left open for a while.

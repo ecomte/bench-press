@@ -61,11 +61,18 @@ jobs:
           python-version: "3.12"
 
       # Sleeper API cache (player list, finished weeks' stats) plus roster snapshots,
-      # so each run downloads less and can still spot adds and drops.
+      # so each run downloads less and can still spot adds and drops. data/history/ is
+      # tracked in git, so it comes from the checkout, never from an older cache; the
+      # sheets, reports and local pages are rebuilt every run, so they aren't cached.
       - name: Restore Sleeper cache
         uses: actions/cache@v4
         with:
-          path: data
+          path: |
+            data
+            !data/history
+            !data/sheets
+            !data/reports
+            !data/lineups
           key: sleeper-data-${{ github.run_id }}
           restore-keys: sleeper-data-
 

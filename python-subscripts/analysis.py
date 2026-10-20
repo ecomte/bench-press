@@ -308,43 +308,50 @@ def easy_bonus(row, boost=0.30, ranks=3, shrink_games=4):
     return round(boost * (ranks - easiest + 1) / ranks * sample, 3)
 
 
-def tough_profile(log_sets, meta, min_games=2, shrink_games=4):
+def tough_profile(log_sets, meta, min_games=2, shrink_games=4, weights=None):
     """{pid: row} for skill players who score about as well against the toughest third of
     defenses as against the rest. log_sets: build_player_logs() logs for one or more seasons
-    (each season's toughness ranks come from that season). row["hold"] (0 to 1) is how much of a
+    (each season's toughness ranks come from that season). weights: how much each season's games
+    count (default 1 each), so older seasons can count less. row["hold"] (0 to 1) is how much of a
     tough-matchup penalty to waive: 1 = he's done at least as well against tough defenses as
     against everyone else, 0 = he drops off as much as a typical player at his position (or
     more), and small samples are pulled toward 0."""
-    split = {}  # pid -> (pos, [pts vs tough], [pts vs the rest])
+    weights = weights or [1.0] * len(log_sets)
+    split = {}  # pid -> (pos, [(pts, weight) vs tough], [(pts, weight) vs the rest])
     for pid in set().union(*log_sets):
         pos = player_pos(meta.get(pid))
         if pos not in SKILL_POS:
             continue
         tough, other = [], []
-        for logs in log_sets:
+        for logs, wt in zip(log_sets, weights):
             for e in logs.get(pid, []):
                 if e["opp_rank"]:
-                    (tough if e["opp_rank"] <= e["opp_of"] / 3.0 else other).append(e["pts_half"])
+                    (tough if e["opp_rank"] <= e["opp_of"] / 3.0 else other).append((e["pts_half"], wt))
         if tough and other:
             split[pid] = (pos, tough, other)
+
+    def avg(games):
+        w = sum(wt for _, wt in games)
+        return sum(x * wt for x, wt in games) / w if w else 0.0
 
     # how much a typical fantasy-relevant player drops off against tough defenses, by position
     base = {}
     for pos in SKILL_POS:
-        t = [x for p, tl, ol in split.values() if p == pos and sum(tl + ol) / len(tl + ol) >= 8 for x in tl]
-        o = [x for p, tl, ol in split.values() if p == pos and sum(tl + ol) / len(tl + ol) >= 8 for x in ol]
-        typical = (sum(t) / len(t)) / (sum(o) / len(o)) if t and o and sum(o) else 0.8
+        t = [g for p, tl, ol in split.values() if p == pos and avg(tl + ol) >= 8 for g in tl]
+        o = [g for p, tl, ol in split.values() if p == pos and avg(tl + ol) >= 8 for g in ol]
+        typical = avg(t) / avg(o) if t and o and avg(o) else 0.8
         base[pos] = min(max(typical, 0.5), 0.95)
 
     out = {}
     for pid, (pos, tough, other) in split.items():
         if len(tough) < min_games or len(other) < min_games:
             continue
-        at, ao = sum(tough) / len(tough), sum(other) / len(other)
+        at, ao = avg(tough), avg(other)
         if ao < 5:  # a few points a game is too noisy to read anything into
             continue
         lift = min(max((at / ao - base[pos]) / (1 - base[pos]), 0.0), 1.0)
-        hold = round(lift * len(tough) / float(len(tough) + shrink_games), 3)
+        n = sum(wt for _, wt in tough)  # older games count as part of a game toward the sample
+        hold = round(lift * n / float(n + shrink_games), 3)
         if hold > 0:
             out[pid] = {"hold": hold, "avg_tough": round(at, 1), "avg_other": round(ao, 1),
                         "g_tough": len(tough), "g_other": len(other)}

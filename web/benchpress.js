@@ -341,7 +341,10 @@
     const season = String(stat.season || state.league_season || state.season);
 
     const sched = new Schedule(await src.app(APP + "/schedule/nfl/regular/" + season, "schedule.json") || []);
-    const week = opts.week || sched.targetWeek();
+    const currentWeek = sched.targetWeek();
+    const week = opts.week || currentWeek;
+    // a week picked with the week buttons, not the one being played now
+    const otherWeek = week !== currentWeek;
     const wk2 = String(week).padStart(2, "0");
     const q = "?season_type=regular&" + posQuery();
 
@@ -362,7 +365,8 @@
     const inj = stat.injuries || {};
     const byesNow = sched.byes(week);
 
-    function injuryOf(pid) {
+    function injuryOf(pid, gstate) {
+      if (otherWeek && gstate === "final") return "";  // today's injury doesn't apply to a game already played
       const pr = proj[pid];
       if (pr && pr.player != null) return pr.player.injury_status || "";
       return (players[pid] || {}).injury_status || "";
@@ -396,11 +400,16 @@
       const rosterIds = {};
       for (const r of rosters) rosterIds[r.roster_id] = r;
 
-      const allPids = (mine.players || []).filter(Boolean);
+      const mineMu = (mu || []).find(m => m.roster_id === mine.roster_id);
+      // another week: the roster and starters Sleeper kept for that week (a past week shows who you really started)
+      const weekMu = otherWeek && mineMu ? mineMu : null;
+      const setStarters = (xs) => (xs || []).some(x => x && x !== "0");
+      const allPids = ((weekMu && (weekMu.players || []).length ? weekMu : mine).players || []).filter(Boolean);
       const reserve = new Set(mine.reserve || []);
       const taxi = new Set(mine.taxi || []);
 
-      const prev = new Set(oldSnap[lid] || []);
+      // roster changes are only tracked for the week being played, so switching weeks doesn't trip them
+      const prev = new Set(otherWeek ? [] : (oldSnap[lid] || []));
       const added = prev.size ? allPids.filter(p => !prev.has(p)) : [];
       const dropped = [...prev].filter(p => !allPids.includes(p));
       newSnap[lid] = allPids;
@@ -410,9 +419,9 @@
         const pos = playerPos(pl) || (isAlpha(pid) ? "DEF" : "?");
         const team = pos === "DEF" ? pid : (pl.team || "");
         const pr = proj[pid];
-        const status = injuryOf(pid);
         const game = team ? sched.game(week, team) : null;
         const gstate = gameState(game, today);
+        const status = injuryOf(pid, gstate);
         const locked = gstate === "live" || gstate === "final";
         const actual = (locked && pid in liveStats) ? score(liveStats[pid], ss) : (locked ? 0 : null);
         let sleeperPts = score((pr || {}).stats, ss);
@@ -448,7 +457,7 @@
           notes.push("W Feast: " + matchupText(pos, row) + ", projection boosted " + (pct >= 0 ? "+" : "") + pct + "%");
         }
         if (tp && row && row.mult < 1) {
-          notes.push("Handles tough Ds better than most " + pos + "s: " + f1(tp.avg_tough) + " a game vs top-third defenses (" + tp.g_tough + " games), " + f1(tp.avg_other) + " otherwise");
+          notes.push("Handles tough Ds better than most " + pos + "s");
         }
         const last3 = pts.slice(-3);
         return {
@@ -479,7 +488,7 @@
         p.value_adj = p.available ? p.adj : -1;
         p.value_sleeper = p.available ? p.sleeper : -1;
       }
-      const cur = (mine.starters || []).slice();
+      const cur = ((weekMu && setStarters(weekMu.starters) ? weekMu.starters : mine.starters) || []).slice();
       while (cur.length < slots.length) cur.push(null);
       const preset = cur.map(c => (c && c !== "0" && pool.has(c) && pool.get(c).locked) ? c : null);
       const frozen = startable.filter(([, p]) => p.locked).map(([pid]) => pid);
@@ -492,7 +501,6 @@
       const curSet = new Set(cur.filter(x => x && x !== "0"));
 
       // ---- auto-subs: {starter: bench player whose points count if the starter doesn't play} ----
-      const mineMu = (mu || []).find(m => m.roster_id === mine.roster_id);
       const subs = {};
       for (const [a, b] of Object.entries(autoSubs(mineMu, mine))) if (curSet.has(a) && pool.has(b) && !curSet.has(b)) subs[a] = b;
       // projected final: real points so far plus the projection for what's left of the game
@@ -603,8 +611,7 @@
         if (p && p.locked) continue;
         if (p && p.rank && p.rank <= 3 && p.pos !== "DEF") {
           const tp = p.hold ? tough[p.id] : null;
-          alerts.push({ level: "info", text: p.name + " faces " + p.opp + " (" + p.matchup + ")." + (tp ? " He's handled tough defenses better than most (" +
-            f1(tp.avg_tough) + " a game vs the top third, " + f1(tp.avg_other) + " otherwise), so the matchup counts against him less." : "") });
+          alerts.push({ level: "info", text: p.name + " faces " + p.opp + " (" + p.matchup + ")." + (tp ? " He handles tough defenses better than most, so the matchup counts against him less." : "") });
         }
         if (p) {
           const qb = p.notes.find(n => n.startsWith("His QB"));
@@ -637,19 +644,39 @@
           const oro = rosterIds[o.roster_id] || {};
           const ou = users[oro.owner_id] || {};
           let oProj = 0, oLive = 0, oStarted = false;
-          for (const pid of o.starters || []) {
-            if (!pid || pid === "0") continue;
+          // opp_player() in benchpress.py: [projected final, real points so far, game started, sub_state fields]
+          const oppPlayer = (pid) => {
             const opl = players[pid] || {};
             const oteam = isAlpha(pid) ? pid : opl.team;
-            const og = sched.game(week, oteam);
-            const st = gameState(og, today);
-            if (st === "live" || st === "final") {
+            const og = oteam ? sched.game(week, oteam) : null;
+            const gs = gameState(og, today);
+            const pj = score((proj[pid] || {}).stats, ss);
+            const locked = gs === "live" || gs === "final";
+            const st = injuryOf(pid, gs);
+            const fields = { locked, game_state: gs, status: st, available: !!og && !OUT_STATUSES.has(st),
+              played: locked && playedWeek(liveStats[pid], pid) };
+            if (locked) {
               const a = score(liveStats[pid] || {}, ss);
-              oProj += a + score((proj[pid] || {}).stats, ss) * gameLeft(og, st, clock);
-              oLive += a; oStarted = true;
-            } else {
-              oProj += score((proj[pid] || {}).stats, ss);
+              return [a + pj * gameLeft(og, gs, clock), a, true, fields];
             }
+            return [pj, 0, false, fields];
+          };
+          // their auto-subs count once it's clear the starter isn't playing (same rule as for you)
+          const oStarters = (o.starters || []).filter(x => x && x !== "0");
+          const oSubs = {};
+          for (const [a, b] of Object.entries(autoSubs(o, oro))) if (oStarters.includes(a) && !oStarters.includes(b)) oSubs[a] = b;
+          const oSubsIn = [];
+          for (const pid of oStarters) {
+            let [pj, nowPts, began, fields] = oppPlayer(pid);
+            if (oSubs[pid] && subState(fields) === "in") {
+              const [spj, snow, sbegan, sfields] = oppPlayer(oSubs[pid]);
+              [pj, nowPts] = subCanScore(sfields) ? [spj, snow] : [0, 0];
+              began = began || sbegan;
+              oSubsIn.push(playerName(oSubs[pid], players[oSubs[pid]]) + " for " + playerName(pid, players[pid]));
+            }
+            oProj += pj;
+            oLive += nowPts;
+            oStarted = oStarted || began;
           }
           const ost = oro.settings || {};
           oppInfo = {
@@ -657,6 +684,7 @@
             owner: ou.display_name || "",
             proj: r1(oProj),
             live: r1(oLive), started: oStarted,
+            subs_in: oSubsIn,
             record: (ost.wins || 0) + "-" + (ost.losses || 0),
           };
         }
@@ -669,7 +697,8 @@
         team_name: (meU.metadata || {}).team_name || meU.display_name || "",
         record: (st.wins || 0) + "-" + (st.losses || 0) + (st.ties ? "-" + st.ties : ""),
         pf: r1(num(st.fpts) + num(st.fpts_decimal) / 100),
-        lineup, bench, stash, alerts, opponent: oppInfo,
+        // a past week can't be changed any more, so only its notes are kept
+        lineup, bench, stash, alerts: week < currentWeek ? alerts.filter(a => a.level === "info") : alerts, opponent: oppInfo,
         // an auto-sub counts for its starter wherever that starter is still in the lineup
         proj_rec: r1(sum(rec.filter(Boolean).map(x => slotPts(x, "adj", recSet)))),
         proj_rec_sleeper: r1(sum(rec.filter(Boolean).map(x => slotPts(x, "sleeper", recSet)))),
@@ -677,17 +706,22 @@
         any_locked: cur.some(x => x && x !== "0" && P(x).locked),
         live_pts: r1(sum(cur.filter(x => x && x !== "0").map(slotLive))),
         scoring: Object.fromEntries(["rec", "pass_td", "bonus_rec_te", "pass_int", "fum_lost"].map(k => [k, ss[k] === undefined ? null : ss[k]])),
+        // the league allows auto-subs, but Sleeper's API doesn't say who anyone picked
+        auto_subs: num((lg.settings || {}).max_subs) > 0,
       });
     }
 
-    try { if (opts.storage) opts.storage.setItem(snapKey, JSON.stringify(newSnap)); } catch (e) { /* private mode */ }
+    try { if (opts.storage && !otherWeek) opts.storage.setItem(snapKey, JSON.stringify(newSnap)); } catch (e) { /* private mode */ }
 
     return {
       generated: easternStamp(now),
       owner: me.display_name || uname, is_me: !other,
       sample: false,
-      user_sheets: "sheets/" + tag + "/",
+      user_sheets: "data/sheets/" + tag + "/",
       season, week, byes: byesNow, matchup_weight: W,
+      // for the week buttons: the week being played now, every week on the schedule, and
+      // whether Sleeper had projections for the picked week (the build only copies the current one)
+      current_week: currentWeek, weeks: sched.weeks(), week_over: sched.weekComplete(week), no_proj: !projList.length,
       stats_weeks: stat.stats_weeks || [], leagues: outLeagues,
       username: tag, live: true, built_at: now.getTime() / 1000,
     };
