@@ -32,6 +32,7 @@ Sleeper API ──► GitHub Actions (scheduled) ──► benchpress.py for eac
 
 - **Hosting:** GitHub Pages, deployed from GitHub Actions. Each person gets `https://ecomte.github.io/bench-press/<username>/`, and each page keeps one tab per league.
 - **Refresh button:** each hosted page has a **Refresh** button that rebuilds the lineup on the phone from live Sleeper data (`web/benchpress.js`). The scheduled build publishes the slow-changing data it needs (player list, defense-vs-position ranks, game logs) to `data/` on the site, so a tap only fetches this week's rosters, projections and live points. If a browser can't reach Sleeper's app endpoints, it uses the build's copies in `data/`.
+- **Week buttons:** under Refresh, buttons switch the page between weeks 1–18. They show the picked week with two on each side, and ‹ › slide to earlier or later weeks; the current week has an orange outline. Refresh stays on the picked week, while reloading the page goes back to the current week (only the current week is saved for reloads). A past week shows the roster and lineup you actually had that week with final points (once a week is over, the winner's score is green and the loser's red), and keeps only its notes, since nothing can change. A future week shows Sleeper's early projections and that week's opponent, with today's injuries. The build only copies the current week's projections, so if a browser can't reach Sleeper directly, other weeks show 0 projected points and the page says so. Locally, `python3 benchpress.py -w N` does the same for one week. Only players with no game in the week on screen (bye or no team) are grayed out; Out, IR and Doubtful players keep normal rows with their red tag.
 - **Landing page:** a Sleeper username search. A name with a built page links straight to it; any other name gets a link to `live/?u=<username>`, which builds that person's page on the spot.
 - **New-user alerts:** the first time a device opens a live page from the search for a name with no saved page, the landing page quietly sends a phone notification through the free [ntfy](https://ntfy.sh) app (topic `ntfy_topic` in `config/config.json`; leave it empty to turn this off). The visitor sees no difference. Usernames ignore letter case (Natibuck and natibuck share one live link and one alert), and before pinging, the page checks ntfy's recent messages (kept about 12 hours) so looking a new user up on another device doesn't send a second alert. Anyone who knows the topic can post to it, so change it if it ever gets spammed.
 - **Schedule (US Eastern):** hourly from 7 AM to midnight with one overnight build at 4 AM, and every 15 minutes during games: Sunday from noon to midnight, plus Monday and Thursday nights. A build can also be started by hand from the Actions tab.
@@ -52,7 +53,10 @@ python3 benchpress.py -u SomeFriend     # someone else's Sleeper username
 python3 batchbenchpress.py              # everyone in batch_users
 python3 batchbenchpress.py --no-open    # same, without opening browser tabs
 python3 batchbenchpress.py --no-open --site site   # build the hosted site into site/ (what Actions runs)
+python3 test-website.py                 # build the site into test-website/ and serve it at http://localhost:8000
 ```
+
+To check the hosted site before pushing, run `python3 test-website.py`. It runs the same build as Actions into `test-website/` (git ignores it), then serves it at http://localhost:8000 until you press Ctrl+C. Extra arguments go to `batchbenchpress.py`, so `python3 test-website.py -w 8` builds week 8.
 
 The first run takes about 20 seconds, because it downloads Sleeper's 5 MB player list, which is then cached for a day. Output goes to folders that git ignores:
 
