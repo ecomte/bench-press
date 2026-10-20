@@ -1,6 +1,6 @@
 # Bench Press
 
-[![Release](https://img.shields.io/badge/release-v1.4.0-green)](https://github.com/ecomte/bench-press/releases)
+[![Release](https://img.shields.io/badge/release-v1.4.1-green)](https://github.com/ecomte/bench-press/releases)
 
 **Open Bench Press: [ecomte.github.io/bench-press](https://ecomte.github.io/bench-press/)**. Search your Sleeper username to see your lineups.
 
@@ -21,6 +21,7 @@ This repository is the GitHub version of Bench Press. It began as a set of scrip
 | 1.2.0 | Sleeper auto-subs (BP-9), case-insensitive usernames for live links and alerts (BP-9), and smash-spot and tough-defense matchup weighting (BP-10). |
 | 1.3.0 | Smash spots renamed W Feast with a green note, and tough-defense notes in darker orange (BP-12). |
 | 1.4.0 | Week buttons, green/red final scores and bye-only gray rows (BP-15), a 5-season tough-defense check and a notice that Sleeper doesn't share auto-subs (BP-14), and generated output and stats history moved under data/ (BP-16). |
+| 1.4.1 | Patch for favicon addition (BP-18). |
 
 Release notes for each version are on the [Releases page](https://github.com/ecomte/bench-press/releases). The original design and trade-offs are in [docs/static-site-plan.md](docs/static-site-plan.md).
 
@@ -116,10 +117,10 @@ Alerts on the page are **Fix** (empty slot or an unavailable starter), **Swap** 
 | `tools/autosub_probe.py` | Prints what Sleeper returns for your leagues' auto-subs, to check Bench Press can read them. |
 | `tools/stats_backfill.py` | One-time download of past seasons' weekly stats into `data/history/stats/` (default: the 5 before this one). |
 | `tools/parity.js` | Replays the build's Sleeper responses through `web/benchpress.js` and checks it picks the same lineups as the Python. |
-| `config/lineups_template.html` | The look of the lineup page. |
+| `config/lineups_template.html` | The look of the lineup page. Its `<head>` also carries the barbell favicon inline (SVG, plus 32 px and 180 px PNGs), so the landing, live and user pages all get it with no extra site files. |
 | `data/history/stats/<season>.json.gz` | Weekly stats for past seasons (every active player-game), kept in the repo for player trends (the one tracked folder under `data/`). `history.load(season)` returns them shaped like Sleeper's weekly stats. |
 | `.github/workflows/` | `build.yml` (scheduled build and Pages deploy) and `cascade-merge.yml` (merges `main` back into `develop`). |
-| `docs/` | Design notes (the static-site plan) and `ANALYZE-PROMPT.md`. |
+| `docs/` | Design notes (the static-site plan), `ANALYZE-PROMPT.md` and `favicon.svg` (the source of the inline favicon). |
 | `data/` | Everything a run writes (git ignores it), plus the tracked `data/history/`. |
 
 ## Data sources
