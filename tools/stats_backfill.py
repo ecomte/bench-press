@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""One-time download of past seasons' weekly stats into the repo (history/stats/), for
+"""One-time download of past seasons' weekly stats into the repo (data/history/stats/), for
 player trends. Uses the same Sleeper stats call as Bench Press (sleeper.week_stats), so the
 raw weeks also land in data/cache/ and later runs reuse them. Run it on the Mac:
 

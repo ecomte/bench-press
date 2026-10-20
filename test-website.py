@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Build the hosted site locally and serve it at http://localhost:8000.
 
-Runs the same build GitHub Actions does, but into test-website/ (git ignores it),
+Runs the same build GitHub Actions does, but into data/test-website/ (git ignores it),
 then serves that folder until you press Ctrl+C.
 
 examples:
@@ -14,7 +14,7 @@ import subprocess
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-OUT = "test-website"
+OUT = os.path.join("data", "test-website")
 PORT = "8000"
 
 

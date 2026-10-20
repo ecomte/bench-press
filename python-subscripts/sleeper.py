@@ -97,40 +97,6 @@ def _get(url, cache_file, max_age_hours):
     return data
 
 
-def headshots(items, max_age_days=30):
-    """items: [(id, pos, team)]. Downloads each player's Sleeper headshot (or team logo for a DEF)
-    once into data/cache/headshots/ and returns {id: data-URI} for embedding in the phone page."""
-    import base64
-    from concurrent.futures import ThreadPoolExecutor
-    folder = os.path.join(CACHE, "headshots")
-    os.makedirs(folder, exist_ok=True)
-
-    def one(item):
-        pid, pos, team = item
-        if pos == "DEF":
-            url, ext, mime = "https://sleepercdn.com/images/team_logos/nfl/%s.png" % str(team).lower(), "png", "image/png"
-        else:
-            url, ext, mime = "https://sleepercdn.com/content/nfl/players/thumb/%s.jpg" % pid, "jpg", "image/jpeg"
-        path = os.path.join(folder, "%s.%s" % (pid, ext))
-        fresh = os.path.exists(path) and (time.time() - os.path.getmtime(path)) < max_age_days * 86400
-        if not fresh and not FIXTURES:
-            try:
-                req = urllib.request.Request(url, headers={"User-Agent": "ecomte-fantasy-tools/1.0"})
-                with urllib.request.urlopen(req, timeout=20) as r:
-                    data = r.read()
-                if data:
-                    with open(path, "wb") as f:
-                        f.write(data)
-            except Exception:
-                pass  # no photo for this player; the page shows initials
-        if os.path.exists(path) and os.path.getsize(path) > 0:
-            with open(path, "rb") as f:
-                return pid, "data:%s;base64,%s" % (mime, base64.b64encode(f.read()).decode("ascii"))
-        return pid, None
-
-    with ThreadPoolExecutor(max_workers=8) as ex:
-        return {pid: uri for pid, uri in ex.map(one, items) if uri}
-
 
 # ---- documented endpoints -------------------------------------------------
 

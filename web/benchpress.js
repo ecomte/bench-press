@@ -717,7 +717,7 @@
       generated: easternStamp(now),
       owner: me.display_name || uname, is_me: !other,
       sample: false,
-      user_sheets: "sheets/" + tag + "/",
+      user_sheets: "data/sheets/" + tag + "/",
       season, week, byes: byesNow, matchup_weight: W,
       // for the week buttons: the week being played now, every week on the schedule, and
       // whether Sleeper had projections for the picked week (the build only copies the current one)

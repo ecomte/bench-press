@@ -87,8 +87,8 @@ def report_md(d, dvp):
             pos, ", ".join("%s %.1f" % (t, rows[t]["allowed_pg"]) for t in order[:5]),
             ", ".join("%s %.1f" % (t, rows[t]["allowed_pg"]) for t in order[::-1][:5])))
     L.append("")
-    mine = d.get("user_sheets") or "sheets/"
-    L.append("Full tables: position sheets and DEF_vs_POS.csv in `sheets/` (shared by everyone), "
+    mine = d.get("user_sheets") or "data/sheets/"
+    L.append("Full tables: position sheets and DEF_vs_POS.csv in `data/sheets/` (shared by everyone), "
              "this person's lineups.csv and game_log.csv in `%s`. Ask Claude to read this report plus those "
              "for a deeper pass." % mine)
     L.append("")
@@ -269,20 +269,3 @@ function notifyOwner(name, leagues) {
 def live_page_html():
     """The hosted live/ page: no build data, just the Refresh logic. It loads whoever is named in ?u=."""
     return page_html({"placeholder": True, "leagues": [], "username": None, "matchup_weight": 0.5}, live=True)
-
-
-def artifact_html(d, photos=None):
-    """Same page, shaped for publishing as a claude.ai artifact (Claude publishes this file
-    so the lineups can be viewed on a phone). The artifact host adds its own <html>/<head>,
-    blocks outside images, and needs a title + gutter meta at the top."""
-    import re
-    html = page_html(d).replace("/*__NOIMG__*/false", "true")
-    # headshots are embedded as data: URIs, since the artifact host can't load sleepercdn.com
-    html = html.replace("/*__PHOTOS__*/{}", json.dumps(photos or {}))
-    head = re.search(r"<head>(.*?)</head>", html, re.S).group(1)
-    body = re.search(r"<body>(.*?)</body>", html, re.S).group(1)
-    head = re.sub(r'<meta charset[^>]*>\s*|<meta name="viewport"[^>]*>\s*', "", head)
-    title = re.search(r"<title>.*?</title>", head).group(0)
-    head = head.replace(title, "")
-    title = "<title>Bench Press \u00b7 %s</title>" % (d.get("owner") or "")
-    return title + '\n<meta name="claude:viewport-fit-sides" content="cover">\n' + head.strip() + "\n" + body.strip() + "\n"

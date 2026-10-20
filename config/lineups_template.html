@@ -165,8 +165,6 @@ footer{font-size:12px;color:var(--dim);border-top:1px solid var(--line);padding-
 <!--__LIVE__-->
 <script>
 let DATA = /*__DATA__*/null;
-const NO_IMG = /*__NOIMG__*/false;
-const PHOTOS = /*__PHOTOS__*/{};
 const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const store = {
@@ -181,8 +179,6 @@ const MODES = [["rec", "Recommended"], ["sleeper", "Sleeper proj only"], ["cur",
 function initials(n) { return n.split(/\s+/).map(w => w[0]).join("").slice(0, 2).toUpperCase(); }
 function avatar(p) {
   if (!p) return '<div class="av">–</div>';
-  if (PHOTOS[p.id]) return '<div class="av">' + esc(initials(p.name)) + '<img alt="" src="' + PHOTOS[p.id] + '" onerror="this.remove()"></div>';
-  if (NO_IMG) return '<div class="av">' + esc(initials(p.name)) + '</div>';
   const src = p.pos === "DEF"
     ? "https://sleepercdn.com/images/team_logos/nfl/" + String(p.team).toLowerCase() + ".png"
     : "https://sleepercdn.com/content/nfl/players/thumb/" + p.id + ".jpg";

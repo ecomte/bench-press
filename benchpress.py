@@ -6,28 +6,27 @@ each position, recommends a lineup per league, and flags byes, injuries and empt
 
 examples:
   python3 benchpress.py                next week with games left, for me (EComte)
-  python3 benchpress.py --open         same, then open lineups/lineups-ecomte.html in the browser
+  python3 benchpress.py --open         same, then open data/lineups/lineups-ecomte.html in the browser
   python3 benchpress.py -w 8           look ahead to week 8
-  python3 benchpress.py -u SomeFriend  run it for a friend -> lineups/lineups-somefriend.html
+  python3 benchpress.py -u SomeFriend  run it for a friend -> data/lineups/lineups-somefriend.html
   python3 benchpress.py -u SomeFriend -w 8 -o
   python3 batchbenchpress.py           me + every friend in config batch_users
   python3 benchpress.py --site site    also write site/<user>/index.html (the GitHub Pages copy)
 
-what it writes (in this folder):
-  lineups/lineups-<user>.html    tabbed lineup page, one tab per team (mine: lineups/lineups-ecomte.html)
-  reports/<season>_weekNN.md     weekly report: give this to Claude
-  sheets/*.csv                   QB/RB/WR/TE/K/DEF/IDP + DEF_vs_POS, shared by everyone
-                                 (rostered_by column says whose team each player is on)
-  sheets/<user>/                 that person's lineups.csv and game_log.csv
-  data/                          API cache, roster snapshot, artifact.html (phone copy)
-  <site>/<user>/index.html       with --site: the hosted page (loads photos from Sleeper's CDN)
-  (a friend's run uses lineups/lineups-<user>.html and reports/<user>/)
+what it writes (under data/ in this folder):
+  data/lineups/lineups-<user>.html  tabbed lineup page, one tab per team (mine: data/lineups/lineups-ecomte.html)
+  data/reports/<season>_weekNN.md   weekly report: give this to Claude
+  data/sheets/*.csv                 QB/RB/WR/TE/K/DEF/IDP + DEF_vs_POS, shared by everyone
+                                    (rostered_by column says whose team each player is on)
+  data/sheets/<user>/               that person's lineups.csv and game_log.csv
+  data/cache/, data/*.json          API cache and roster snapshots
+  <site>/<user>/index.html          with --site: the hosted page (loads photos from Sleeper's CDN)
+  (a friend's run uses data/lineups/lineups-<user>.html and data/reports/<user>/)
 
 after a run:
   - Make the swaps in the Sleeper app (the API is read-only).
-  - Phone: tell Claude "publish my lineups" to update
-    https://claude.ai/artifact/88VThYJeg3jj7zhtVWaGMm
-  - Deeper look: paste ANALYZE-PROMPT.md into a Claude chat.
+  - Phone: the GitHub Pages site (https://ecomte.github.io/bench-press/<user>/) rebuilds on its own schedule.
+  - Deeper look: paste docs/ANALYZE-PROMPT.md into a Claude chat.
 
 best times to run: Tue/Wed after waivers, and Sunday morning for late injury news.
 settings (username, league nicknames, tab order, matchup weight): config/config.json
@@ -49,10 +48,10 @@ import analysis as A  # noqa: E402
 import history as H  # noqa: E402
 import sleeper as S  # noqa: E402
 
-SHEETS = os.path.join(HERE, "sheets")
-REPORTS = os.path.join(HERE, "reports")
-DATA = os.path.join(HERE, "data")
-LINEUPS = os.path.join(HERE, "lineups")  # local lineup pages, one per person
+DATA = os.path.join(HERE, "data")  # everything a run writes; only data/history/ is tracked by git
+SHEETS = os.path.join(DATA, "sheets")
+REPORTS = os.path.join(DATA, "reports")
+LINEUPS = os.path.join(DATA, "lineups")  # local lineup pages, one per person
 
 
 def load_config():
@@ -92,10 +91,9 @@ def main():
                     help="open the lineup page in your browser when done")
     ap.add_argument("-u", "--user", metavar="USERNAME",
                     help="run for a different Sleeper username, e.g. a friend (a leading @ is fine). "
-                         "Output goes to lineups/lineups-<username>.html, reports/<username>/ and sheets/<username>/")
+                         "Output goes to data/lineups/lineups-<username>.html, data/reports/<username>/ and data/sheets/<username>/")
     ap.add_argument("--site", metavar="DIR",
-                    help="also write the page to DIR/<username>/index.html for the hosted site, and skip the "
-                         "photo-embedded claude.ai copy (the hosted page loads photos from Sleeper's CDN)")
+                    help="also write the page to DIR/<username>/index.html for the hosted site")
     args = ap.parse_args()
 
     cfg = load_config()
@@ -122,12 +120,11 @@ def main():
         sys.exit("Couldn't find Sleeper user %r" % uname)
     tag = me.get("username") or uname.lower()
     tag = tag.lower()
-    # Position sheets + DEF_vs_POS are shared by everyone (sheets/); lineups and game log are per person.
-    SHEETS = os.path.join(HERE, "sheets")
+    # Position sheets + DEF_vs_POS are shared by everyone (data/sheets/); lineups and game log are per person.
     USER_SHEETS = os.path.join(SHEETS, tag)
-    REPORTS = os.path.join(HERE, "reports", tag) if other else os.path.join(HERE, "reports")
+    REPORTS = os.path.join(DATA, "reports", tag) if other else os.path.join(DATA, "reports")
     if other:
-        print("Running for %s (not you): output goes to lineups/lineups-%s.html" % (me.get("display_name") or uname, tag))
+        print("Running for %s (not you): output goes to data/lineups/lineups-%s.html" % (me.get("display_name") or uname, tag))
     user_id = me["user_id"]
     state = S.nfl_state() or {}
     season = str(cfg.get("season") or state.get("league_season") or state.get("season"))
@@ -173,7 +170,7 @@ def main():
             row["easy"] = A.easy_bonus(row, EASY, EASY_RANKS)
 
     # Past seasons give players enough games against tough defenses to tell who holds up against
-    # them. They come from history/stats/ in the repo (tools/stats_backfill.py), or from Sleeper
+    # them. They come from data/history/stats/ in the repo (tools/stats_backfill.py), or from Sleeper
     # for a season not saved there yet. Each season's toughness ranks come from that season, and
     # older seasons count less.
     log_sets, weights, hist_meta = [logs], [1.0], {}
@@ -729,7 +726,7 @@ def main():
         "generated": eastern_stamp(now),
         "owner": me.get("display_name") or uname, "is_me": not other,
         "sample": bool(os.environ.get("FF_FIXTURES")),
-        "user_sheets": "sheets/%s/" % tag,
+        "user_sheets": "data/sheets/%s/" % tag,
         "season": season, "week": week, "byes": byes_now, "matchup_weight": W,
         "current_week": current_week, "weeks": sched.weeks(), "week_over": sched.week_complete(week),
         "stats_weeks": sorted(weekly), "leagues": out_leagues,
@@ -764,16 +761,6 @@ def main():
         sitedata.write(args.site, cfg, season, week, W, players, sched_raw, proj_list, live_list,
                        sorted(weekly), dvp, logs, inj, scoring_keys, tough)
         print("Site:    %s" % os.path.join(site_dir, "index.html"))
-    else:
-        print("Player photos for the phone page...")
-        seen = {}
-        for L in out_leagues:
-            people = L["bench"] + L["stash"] + [s[k] for s in L["lineup"] for k in ("rec", "cur", "sleeper") if s[k]]
-            for p in people:
-                seen[p["id"]] = (p["id"], p["pos"], p["team"])
-        photos = S.headshots(list(seen.values()))
-        with open(os.path.join(DATA, "artifact%s.html" % (("_" + tag) if other else "")), "w") as f:
-            f.write(render.artifact_html(payload, photos))
 
     print("")
     for L in out_leagues:
