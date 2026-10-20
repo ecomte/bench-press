@@ -1,6 +1,6 @@
 """Past seasons' weekly stats, saved in the repo by tools/stats_backfill.py.
 
-history/stats/<season>.json.gz holds one finished regular season:
+data/history/stats/<season>.json.gz holds one finished regular season:
   {"season": "2024", "weeks": {"1": [row, ...], ...}, "players": {player_id: {...}}}
 Each row is one player-game from Sleeper's weekly stats (only players who were active), without the
 bulky "player" object; the season's "players" map holds those once. load() puts them back, so
@@ -12,7 +12,7 @@ import json
 import os
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-FOLDER = os.path.join(ROOT, "history", "stats")
+FOLDER = os.path.join(ROOT, "data", "history", "stats")  # tracked by git, unlike the rest of data/
 
 # Player fields kept per season (the rest of Sleeper's player object is news/injury noise)
 PLAYER_KEYS = ("first_name", "last_name", "position", "fantasy_positions", "team", "years_exp")

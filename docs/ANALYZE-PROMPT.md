@@ -1,17 +1,17 @@
 # Paste this into Claude after running `python3 benchpress.py`
 
-Connect `~/ClaudeVille/fantasy-football` to the chat (or attach the newest `reports/*.md`, the `sheets/` position CSVs, and `sheets/ecomte/`), then paste:
+Connect `~/ClaudeVille/fantasy-football` to the chat (or attach the newest `data/reports/*.md`, the `data/sheets/` position CSVs, and `data/sheets/ecomte/`), then paste:
 
 ```
 I just ran my fantasy football Bench Press (ClaudeVille/fantasy-football, see README.md).
-Read the newest file in reports/ first, then use the CSVs to dig deeper: position sheets and
-DEF_vs_POS.csv in sheets/ (filter rostered_by for EComte), my lineups.csv and game_log.csv in sheets/ecomte/.
+Read the newest file in data/reports/ first, then use the CSVs to dig deeper: position sheets and
+DEF_vs_POS.csv in data/sheets/ (filter rostered_by for EComte), my lineups.csv and game_log.csv in data/sheets/ecomte/.
 
 For each of my 4 leagues:
 1. Confirm the "Fix" and "Swap" items, and tell me plainly what to change in Sleeper.
 2. Make a call on every "Your call" item: who to start, and why, in a sentence.
 3. Look for anything the script can't see:
-   - target share / snap % trending up or down over the last 3 weeks (sheets/ecomte/game_log.csv)
+   - target share / snap % trending up or down over the last 3 weeks (data/sheets/ecomte/game_log.csv)
    - a player who has struggled against defenses ranked top-10 at his position
      (avg_vs_top10_def vs avg_vs_other_def) and is facing one now
    - a starter whose own QB is out, or whose opponent's defense is missing starters
