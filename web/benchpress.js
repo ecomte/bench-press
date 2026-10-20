@@ -30,6 +30,8 @@
   };
   const SLOT_LABEL = { SUPER_FLEX: "SF", WRRB_FLEX: "W/R", REC_FLEX: "W/T", FLEX: "FLEX", IDP_FLEX: "IDP" };
   const OUT_STATUSES = new Set(["Out", "IR", "PUP", "Sus", "NA", "COV", "DNR"]);
+  // injury tags a player can come back from by kickoff (a Return watch if Sleeper still projects him)
+  const RETURN_STATUSES = new Set(["Out", "IR", "PUP"]);
   const HURT = new Set(["Out", "IR", "Doubtful", "PUP", "Sus"]);
 
   // ---- small helpers (Python equivalents in analysis.py) -------------------------
@@ -361,6 +363,7 @@
     const dvp = stat.dvp || {};
     const tough = stat.tough || {};
     const smashGap = num(stat.smash_gap === undefined ? 3.0 : stat.smash_gap);
+    const returnMin = num(stat.return_min === undefined ? 5.0 : stat.return_min);
     const logs = stat.logs || {};
     const inj = stat.injuries || {};
     const byesNow = sched.byes(week);
@@ -604,6 +607,21 @@
         if (q.adj - p.adj <= smashGap) {
           alerts.push({ level: "call", text: "W Feast: " + p.name + " (" + f1(p.adj) + ") faces " + p.opp + ", the " + p.matchup +
             ". Worth a look over " + q.name + " (" + f1(q.adj) + ") at " + (SLOT_LABEL[slots[i]] || slots[i]) + "." });
+        }
+      }
+      // Out (or IR) right now, but Sleeper still projects him over a starter: he may be cleared by kickoff
+      for (const p of bench.concat(stash.filter(q => q.reserve)).sort((a, b) => (b.adj - a.adj) || byName(a, b))) {
+        if (!RETURN_STATUSES.has(p.status) || p.locked || !p.date || p.adj < returnMin) continue;
+        const spots = slots.map((s, i) => [i, s]).filter(([i, s]) => rec[i] && !P(rec[i]).locked &&
+          (p.fpos || [p.pos]).some(x => (SLOT_ELIG[s] || []).includes(x)));
+        if (!spots.length) continue;
+        let [i] = spots[0];
+        for (const [j] of spots) if (P(rec[j]).adj < P(rec[i]).adj) i = j;
+        const q = P(rec[i]);
+        if (p.adj > q.adj) {
+          alerts.push({ level: "return", text: p.name + " is " + p.status + " right now, but Sleeper still projects him for " + f1(p.adj) +
+            ", more than " + q.name + " (" + f1(q.adj) + ") at " + (SLOT_LABEL[slots[i]] || slots[i]) + ". Check his status before his " +
+            (p.day || "?") + " game; if he's cleared, start him" + (p.reserve ? " (he's in your IR slot, so activate him first)" : "") + "." });
         }
       }
       for (const x of rec) {

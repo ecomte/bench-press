@@ -102,6 +102,7 @@ def main():
     EASY = float(cfg.get("easy_matchup_boost", 0.30))
     EASY_RANKS = int(cfg.get("easy_matchup_ranks", 3))
     SMASH_GAP = float(cfg.get("smash_alert_gap", 3.0))  # flag a benched smash spot this close to a starter
+    RETURN_MIN = float(cfg.get("return_watch_min", 5.0))  # an Out player projected at least this much can get a Return watch
     HISTORY = int(cfg.get("history_seasons", 5))  # past seasons used to spot players who beat tough defenses
     DECAY = float(cfg.get("history_decay", 0.7))  # each season back counts this much less (0.7, 0.49, ...)
     nick = cfg.get("league_nicknames", {}) if not (args.user and args.user.lstrip("@").lower() != cfg["username"].lower()) else {}
@@ -453,6 +454,20 @@ def main():
             if q["adj"] - p["adj"] <= SMASH_GAP:
                 alerts.append({"level": "call", "text": "W Feast: %s (%.1f) faces %s, the %s. Worth a look over %s (%.1f) at %s." % (
                     p["name"], p["adj"], p["opp"], p["matchup"], q["name"], q["adj"], A.SLOT_LABEL.get(slots[i], slots[i]))})
+        # Out (or IR) right now, but Sleeper still projects him over a starter: he may be cleared by kickoff
+        for p in sorted(bench + [q for q in stash if q["reserve"]], key=lambda p: (-p["adj"], p["name"])):
+            if p["status"] not in A.RETURN_STATUSES or p["locked"] or not p["date"] or p["adj"] < RETURN_MIN:
+                continue
+            spots = [(i, P(rec[i])) for i, s in enumerate(slots) if rec[i] and not P(rec[i])["locked"]
+                     and (A.SLOT_ELIG.get(s) or set()).intersection(p.get("fpos") or [p["pos"]])]
+            if not spots:
+                continue
+            i, q = min(spots, key=lambda t: (t[1]["adj"], t[0]))
+            if p["adj"] > q["adj"]:
+                alerts.append({"level": "return", "text": "%s is %s right now, but Sleeper still projects him for %.1f, more than %s (%.1f) at %s. "
+                               "Check his status before his %s game; if he's cleared, start him%s." % (
+                                   p["name"], p["status"], p["adj"], q["name"], q["adj"], A.SLOT_LABEL.get(slots[i], slots[i]),
+                                   p["day"] or "?", " (he's in your IR slot, so activate him first)" if p["reserve"] else "")})
         for x in rec:
             p = P(x)
             if p and p["locked"]:
@@ -765,7 +780,8 @@ def main():
     print("")
     for L in out_leagues:
         bad = sum(1 for a in L["alerts"] if a["level"] in ("bad", "change"))
-        print("  %-34s %s  proj %.1f%s" % (L["short"][:34], "!! %d to fix" % bad if bad else "ok      ", L["proj_rec"],
+        back = sum(1 for a in L["alerts"] if a["level"] == "return")
+        print("  %-34s %s  proj %.1f%s" % (L["short"][:34], ("!! %d to fix" % bad if bad else "ok      ") + ("  %d to watch" % back if back else ""), L["proj_rec"],
                                           ("  vs %s (%.1f)" % (L["opponent"]["team"], L["opponent"]["proj"])) if L["opponent"] else ""))
     print("\nSheets:  %s (shared) and %s" % (SHEETS, USER_SHEETS))
     print("Report:  %s" % rpath)
