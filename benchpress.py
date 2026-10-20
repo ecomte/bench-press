@@ -133,7 +133,9 @@ def main():
     season = str(cfg.get("season") or state.get("league_season") or state.get("season"))
     sched_raw = S.schedule(season)
     sched = A.Schedule(sched_raw)
-    week = args.week or sched.target_week()
+    current_week = sched.target_week()
+    week = args.week or current_week
+    other_week = week != current_week  # -w for a week other than the one being played now
     print("Season %s, setting lineups for week %d" % (season, week))
 
     # ---- shared data ----------------------------------------------------------------
@@ -200,7 +202,9 @@ def main():
     inj = A.team_injuries(players)
     byes_now = sched.byes(week)
 
-    def injury_of(pid):
+    def injury_of(pid, gstate=None):
+        if other_week and gstate == "final":
+            return ""  # today's injury doesn't apply to a game already played
         pr = proj.get(pid)
         if pr and pr.get("player") is not None:
             return (pr["player"].get("injury_status") or "")
@@ -237,14 +241,18 @@ def main():
             continue
         roster_ids = {r["roster_id"]: r for r in rosters}
 
-        all_pids = [p for p in (mine.get("players") or []) if p]
+        mu = S.matchups(lid, week)
+        mine_mu = next((m for m in mu if m.get("roster_id") == mine["roster_id"]), None)
+        # another week: the roster and starters Sleeper kept for that week (a past week shows who you really started)
+        week_mu = mine_mu if other_week else None
+        all_pids = [p for p in ((week_mu if week_mu and week_mu.get("players") else mine).get("players") or []) if p]
         reserve = set(mine.get("reserve") or [])
         taxi = set(mine.get("taxi") or [])
         for pid in all_pids:
             owned.setdefault(pid, []).append(short)
 
-        # roster changes since last run
-        prev = set(old_snap.get(lid, []))
+        # roster changes since last run (only tracked for the week being played)
+        prev = set() if other_week else set(old_snap.get(lid, []))
         added = [p for p in all_pids if prev and p not in prev]
         dropped = [p for p in prev if p not in set(all_pids)]
         new_snap[lid] = all_pids
@@ -254,9 +262,9 @@ def main():
             pos = A.player_pos(pl) or ("DEF" if pid.isalpha() else "?")
             team = pid if pos == "DEF" else (pl.get("team") or "")
             pr = proj.get(pid)
-            status = injury_of(pid)
             game = sched.game(week, team) if team else None
             gstate = A.game_state(game, today)
+            status = injury_of(pid, gstate)
             locked = gstate in ("live", "final")
             actual = A.score(live_stats[pid], ss) if (locked and pid in live_stats) else (0.0 if locked else None)
             sleeper_pts = A.score((pr or {}).get("stats"), ss)
@@ -319,7 +327,8 @@ def main():
         for p in startable.values():
             p["value_adj"] = p["adj"] if p["available"] else -1
             p["value_sleeper"] = p["sleeper"] if p["available"] else -1
-        cur = list(mine.get("starters") or [])
+        set_starters = week_mu and any(x and x != "0" for x in (week_mu.get("starters") or []))
+        cur = list((week_mu if set_starters else mine).get("starters") or [])
         cur += [None] * (len(slots) - len(cur))
         # players whose game has started can't move: starters stay put, bench stays benched
         preset = [c if (c and c != "0" and c in pool and pool[c]["locked"]) else None for c in cur]
@@ -336,8 +345,6 @@ def main():
         cur_set = set(x for x in cur if x and x != "0")
 
         # ---- auto-subs: {starter: bench player whose points count if the starter doesn't play} ----
-        mu = S.matchups(lid, week)
-        mine_mu = next((m for m in mu if m.get("roster_id") == mine["roster_id"]), None)
         subs = {a: b for a, b in A.auto_subs(mine_mu, mine).items() if a in cur_set and b in pool and b not in cur_set}
 
         def pts(p, key):  # projected final: real points so far plus the projection for what's left of the game
@@ -500,7 +507,7 @@ def main():
                     pj = A.score((proj.get(pid) or {}).get("stats"), ss)
                     locked = ostate in ("live", "final")
                     stats = live_stats.get(pid) or {}
-                    st = injury_of(pid)
+                    st = injury_of(pid, ostate)
                     fields = {"locked": locked, "game_state": ostate, "status": st,
                               "available": bool(ogame) and st not in A.OUT_STATUSES,
                               "played": locked and (A.played({"stats": stats, "player_id": pid}) or A.num(stats.get("gms_active")) > 0)}
@@ -540,7 +547,9 @@ def main():
             "team_name": (me_u.get("metadata") or {}).get("team_name") or me_u.get("display_name") or "",
             "record": "%d-%d%s" % (st.get("wins", 0), st.get("losses", 0), ("-%d" % st["ties"]) if st.get("ties") else ""),
             "pf": round(num(st.get("fpts")) + num(st.get("fpts_decimal")) / 100, 1),
-            "lineup": lineup, "bench": bench, "stash": stash, "alerts": alerts, "opponent": opp_info,
+            # a past week can't be changed any more, so only its notes are kept
+            "lineup": lineup, "bench": bench, "stash": stash, "opponent": opp_info,
+            "alerts": [a for a in alerts if a["level"] == "info"] if week < current_week else alerts,
             # an auto-sub counts for its starter wherever that starter is still in the lineup
             "proj_rec": round(sum(slot_pts(x, "adj", rec_set) for x in rec if x), 1),
             "proj_rec_sleeper": round(sum(slot_pts(x, "sleeper", rec_set) for x in rec if x), 1),
@@ -554,8 +563,9 @@ def main():
         })
 
     os.makedirs(DATA, exist_ok=True)
-    with open(snapshot_path, "w") as f:
-        json.dump(new_snap, f)
+    if not other_week:
+        with open(snapshot_path, "w") as f:
+            json.dump(new_snap, f)
 
     # ---- ownership: remember whose rosters each player is on (one file per person) ----------
     owned_dir = os.path.join(DATA, "owned")
@@ -721,6 +731,7 @@ def main():
         "sample": bool(os.environ.get("FF_FIXTURES")),
         "user_sheets": "sheets/%s/" % tag,
         "season": season, "week": week, "byes": byes_now, "matchup_weight": W,
+        "current_week": current_week, "weeks": sched.weeks(), "week_over": sched.week_complete(week),
         "stats_weeks": sorted(weekly), "leagues": out_leagues,
         "username": tag,
         "built_at": now.timestamp(),
