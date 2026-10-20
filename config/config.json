@@ -5,6 +5,7 @@
   "easy_matchup_boost": 0.3,
   "easy_matchup_ranks": 3,
   "smash_alert_gap": 3.0,
+  "return_watch_min": 5.0,
   "history_seasons": 5,
   "history_decay": 0.7,
   "league_nicknames": {

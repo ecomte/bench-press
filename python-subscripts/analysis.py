@@ -29,6 +29,8 @@ IDP_SCORING = {
 }
 
 OUT_STATUSES = {"Out", "IR", "PUP", "Sus", "NA", "COV", "DNR"}
+# injury tags a player can come back from by kickoff (a Return watch if Sleeper still projects him)
+RETURN_STATUSES = {"Out", "IR", "PUP"}
 DEF_POSITIONS = {"DE", "DT", "DL", "LB", "ILB", "OLB", "MLB", "CB", "S", "SS", "FS", "DB", "NT"}
 
 
