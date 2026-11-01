@@ -63,6 +63,7 @@ def write(site, cfg, season, week, matchup_weight, players, schedule, proj_list,
                 for pos, rows in dvp.items() if not pos.startswith("_")},
         "smash_gap": float(cfg.get("smash_alert_gap", 3.0)),
         "return_min": float(cfg.get("return_watch_min", 5.0)),
+        "def_swap_ranks": int(cfg.get("def_swap_ranks", 8)),
         "tough": tough or {},  # players who hold up against tough defenses (analysis.tough_profile)
         "logs": {pid: [_slim(e["stats"], keys) for e in entries] for pid, entries in logs.items()},
         "injuries": {t: v for t, v in injuries.items()},
