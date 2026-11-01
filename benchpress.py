@@ -103,6 +103,7 @@ def main():
     EASY_RANKS = int(cfg.get("easy_matchup_ranks", 3))
     SMASH_GAP = float(cfg.get("smash_alert_gap", 3.0))  # flag a benched smash spot this close to a starter
     RETURN_MIN = float(cfg.get("return_watch_min", 5.0))  # an Out player projected at least this much can get a Return watch
+    DEF_N = int(cfg.get("def_swap_ranks", 8))  # a bottom-8 defense, or one facing a top-8 offense, gets a Defense check warning
     HISTORY = int(cfg.get("history_seasons", 5))  # past seasons used to spot players who beat tough defenses
     DECAY = float(cfg.get("history_decay", 0.7))  # each season back counts this much less (0.7, 0.49, ...)
     nick = cfg.get("league_nicknames", {}) if not (args.user and args.user.lstrip("@").lower() != cfg["username"].lower()) else {}
@@ -468,6 +469,16 @@ def main():
                                "Check his status before his %s game; if he's cleared, start him%s." % (
                                    p["name"], p["status"], p["adj"], q["name"], q["adj"], A.SLOT_LABEL.get(slots[i], slots[i]),
                                    p["day"] or "?", " (he's in your IR slot, so activate him first)" if p["reserve"] else "")})
+        # Defense check: the defense in the lineup is one of the worst this season, or faces one of the best offenses
+        def_ranks = None
+        for i, s in enumerate(slots):
+            p = P(rec[i]) if s == "DEF" else None
+            if p is None or p["locked"] or not p["available"]:
+                continue
+            def_ranks = def_ranks or A.def_ranks(logs, ss)
+            why = A.def_swap_reason(p, def_ranks, DEF_N)
+            if why:
+                alerts.append({"level": "warn", "text": "Defense check: %s %s. Consider swapping your defense this week." % (p["name"], why)})
         for x in rec:
             p = P(x)
             if p and p["locked"]:
