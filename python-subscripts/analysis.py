@@ -368,6 +368,31 @@ def matchup_mult(row, hold=0.0):
     return mult
 
 
+def def_ranks(logs, scoring):
+    """Team defenses ranked by season fantasy points per game in one league's scoring.
+    {team: {"rank", "of", "avg"}}; rank 1 = the best defense."""
+    avgs = {}
+    for pid, log in logs.items():
+        if not pid.isalpha() or not log:
+            continue  # team defenses are the players whose id is the team abbreviation
+        pts = [score(e["stats"], scoring) for e in log]
+        avgs[pid] = sum(pts) / len(pts)
+    order = sorted(avgs, key=lambda t: (-avgs[t], t))
+    return {t: {"rank": i + 1, "of": len(order), "avg": round(avgs[t], 1)} for i, t in enumerate(order)}
+
+
+def def_swap_reason(p, ranks, n=8):
+    """Why a starting defense is worth replacing: bottom-n on the season, or facing a top-n offense.
+    Returns "" when neither is true. dvp DEF rank 1 = the offense that gives defenses the fewest points."""
+    why = []
+    r = ranks.get(p["team"])
+    if r and r["of"] >= 2 * n and r["rank"] > r["of"] - n:
+        why.append("is the %s-worst defense this season (%.1f pts a game)" % (ordinal(r["of"] - r["rank"] + 1), r["avg"]))
+    if p.get("rank") and p.get("of", 0) >= 2 * n and p["rank"] <= n:
+        why.append("faces %s (the %s)" % (p["opp"], p["matchup"]))
+    return " and ".join(why)
+
+
 # ---------------------------------------------------------------------------
 # Team context: injured defensive starters and offensive starters
 

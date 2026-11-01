@@ -101,6 +101,29 @@
     return mult;
   }
 
+  // team defenses ranked by season points per game in one league's scoring; rank 1 = best (def_ranks)
+  function defRanks(logs, scoring) {
+    const avgs = {};
+    for (const pid in logs) {
+      const log = logs[pid];
+      if (!isAlpha(pid) || !log || !log.length) continue;
+      avgs[pid] = log.reduce((a, s) => a + score(s, scoring), 0) / log.length;
+    }
+    const order = Object.keys(avgs).sort((a, b) => (avgs[b] - avgs[a]) || (a < b ? -1 : a > b ? 1 : 0));
+    const out = {};
+    order.forEach((t, i) => { out[t] = { rank: i + 1, of: order.length, avg: pyRound(avgs[t], 1) }; });
+    return out;
+  }
+
+  // why a starting defense is worth replacing: bottom-n on the season, or facing a top-n offense (def_swap_reason)
+  function defSwapReason(p, ranks, n) {
+    const why = [];
+    const r = ranks[p.team];
+    if (r && r.of >= 2 * n && r.rank > r.of - n) why.push("is the " + ordinal(r.of - r.rank + 1) + "-worst defense this season (" + f1(r.avg) + " pts a game)");
+    if (p.rank && (p.of || 0) >= 2 * n && p.rank <= n) why.push("faces " + p.opp + " (the " + p.matchup + ")");
+    return why.join(" and ");
+  }
+
   function parseDate(s) {
     const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s || "");
     return m ? new Date(+m[1], +m[2] - 1, +m[3]) : null;
@@ -364,6 +387,7 @@
     const tough = stat.tough || {};
     const smashGap = num(stat.smash_gap === undefined ? 3.0 : stat.smash_gap);
     const returnMin = num(stat.return_min === undefined ? 5.0 : stat.return_min);
+    const defN = parseInt(stat.def_swap_ranks === undefined ? 8 : stat.def_swap_ranks, 10);
     const logs = stat.logs || {};
     const inj = stat.injuries || {};
     const byesNow = sched.byes(week);
@@ -624,6 +648,15 @@
             (p.day || "?") + " game; if he's cleared, start him" + (p.reserve ? " (he's in your IR slot, so activate him first)" : "") + "." });
         }
       }
+      // Defense check: the defense in the lineup is one of the worst this season, or faces one of the best offenses
+      let defRanksL = null;
+      slots.forEach((s, i) => {
+        const p = s === "DEF" ? P(rec[i]) : null;
+        if (!p || p.locked || !p.available) return;
+        defRanksL = defRanksL || defRanks(logs, ss);
+        const why = defSwapReason(p, defRanksL, defN);
+        if (why) alerts.push({ level: "warn", text: "Defense check: " + p.name + " " + why + ". Consider swapping your defense this week." });
+      });
       for (const x of rec) {
         const p = P(x);
         if (p && p.locked) continue;
