@@ -55,9 +55,10 @@ h1 a:hover{text-decoration:underline;text-decoration-color:var(--accent);text-un
 .tab{position:relative;display:inline-flex;flex-direction:column;align-items:center;line-height:1.15;background:transparent;border:1px solid var(--line);color:var(--ink);border-radius:999px;padding:6px 16px 9px;font:600 14px var(--body);cursor:pointer}
 .tab .rec{font:500 11px var(--mono);color:var(--muted);margin-top:1px}
 .tab[aria-selected="true"] .rec{color:inherit;opacity:.75}
-.tab .wbar{position:absolute;inset:-1px;border-radius:inherit;overflow:hidden;display:flex;align-items:flex-end;gap:1px;pointer-events:none}
-.tab .wbar span{height:4px}
+.tab .wbar{position:absolute;left:14px;right:14px;bottom:3px;height:4px;border-radius:2px;background:var(--line);overflow:hidden;pointer-events:none}
+.tab .wbar span{display:block;height:100%;min-width:4px;border-radius:2px}
 .tab .wbar .up{background:var(--good)} .tab .wbar .down{background:var(--bad)}
+.tab[aria-selected="true"] .wbar{background:rgba(0,0,0,.22)}
 .tab:hover{border-color:var(--muted)}
 .tab[aria-selected="true"]{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
 .tab .dot{position:absolute;top:-4px;right:-4px;min-width:18px;height:18px;border-radius:9px;background:var(--bad);color:#fff;font:700 11px/18px var(--body);text-align:center;padding:0 4px}
@@ -77,6 +78,8 @@ h1 a:hover{text-decoration:underline;text-decoration-color:var(--accent);text-un
 .board .vs{font:600 12px var(--mono);color:var(--dim)}
 .board .wp{grid-column:1/-1;display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:8px;font:700 12px var(--mono)}
 .board .wp .bar{display:flex;gap:2px;height:10px;border-radius:5px;overflow:hidden;background:var(--row2)}
+.board .wp .bar div{min-width:10px;border-radius:5px}
+.board .wp span.dim{color:var(--muted)}
 .board .wp .up{background:var(--good);color:var(--good)}
 .board .wp .down{background:var(--bad);color:var(--bad)}
 .board .wp span.up,.board .wp span.down{background:none}
@@ -307,11 +310,11 @@ function render() {
   $("#byes").innerHTML = "Byes: " + (DATA.byes.length ? DATA.byes.map(t => '<span class="chip">' + esc(t) + '</span>').join("") : "none");
   $("#tabs").innerHTML = DATA.leagues.map(l => {
     const n = l.alerts.filter(a => a.level === "bad" || a.level === "change").length;
-    // record under the name, and a thin win-chance bar along the bottom (green = your share when favored, red when not)
+    // record under the name, and a small meter inset above the bottom edge (kept clear of the rounded ends):
+    // favored = green filled to your win chance, underdog = flipped to red filled to your losing chance (30% win -> 70% red)
     const p = leagueWin(l), me = p == null ? null : Math.round(p);
     const bar = p == null ? "" : '<span class="wbar" title="Win chance ' + me + '%">' +
-      '<span class="' + (me >= 50 ? "up" : "down") + '" style="width:' + p.toFixed(1) + '%"></span>' +
-      '<span class="' + (100 - me >= 50 ? "up" : "down") + '" style="width:' + (100 - p).toFixed(1) + '%"></span></span>';
+      '<span class="' + (me >= 50 ? "up" : "down") + '" style="width:' + (me >= 50 ? p : 100 - p).toFixed(1) + '%"></span></span>';
     return '<button class="tab" role="tab" data-id="' + esc(l.id) + '" aria-selected="' + (l.id === tab) + '"' +
       (p == null ? "" : ' aria-label="' + esc(l.short) + ', record ' + esc(l.record) + ', win chance ' + me + '%"') + '>' +
       '<span class="nm">' + esc(l.short) + '</span>' + (l.record ? '<span class="rec">(' + esc(l.record) + ')</span>' : "") +
@@ -344,12 +347,14 @@ function render() {
     (o ? (() => {
       const p = leagueWin(L);
       const me = Math.round(p), them = 100 - me;
-      // green for whoever is favored, red for the underdog (an even game shows both green)
-      const mine = me >= 50 ? "up" : "down", theirs = them >= 50 ? "up" : "down";
+      // like Sleeper: favored (50%+) shows your green share then their red; as the underdog only your red share shows on an
+      // empty track. Segments keep a 10px minimum so a 1% sliver still shows as a dot instead of vanishing into the rounded end.
+      const fav = me >= 50;
       return '<div class="wp" title="Estimated chance to win, from the projected totals and how much is left to play">' +
-        '<span class="' + mine + '">' + me + '%</span><div class="bar" role="img" aria-label="Win chance: you ' + me + '%, ' + esc(o.team) + ' ' + them + '%">' +
-        '<div class="' + mine + '" style="width:' + p.toFixed(1) + '%"></div><div class="' + theirs + '" style="width:' + (100 - p).toFixed(1) + '%"></div></div>' +
-        '<span class="' + theirs + '">' + them + '%</span></div>';
+        '<span class="' + (fav ? "up" : "down") + '">' + me + '%</span><div class="bar" role="img" aria-label="Win chance: you ' + me + '%, ' + esc(o.team) + ' ' + them + '%">' +
+        '<div class="' + (fav ? "up" : "down") + '" style="width:' + p.toFixed(1) + '%"></div>' +
+        (fav ? '<div class="down" style="width:' + (100 - p).toFixed(1) + '%"></div>' : '') + '</div>' +
+        '<span class="' + (fav ? "down" : "dim") + '">' + them + '%</span></div>';
     })() : '') +
     '<div class="note">' + (o && o.subs_in && o.subs_in.length ? '<span style="color:var(--call)">⇄ ' + esc(o.team) + ' total counts auto-sub ' + o.subs_in.map(esc).join(", ") + '.</span> ' : '') +
     (over ? 'Final scores: green won, red lost. ' : started ? 'Green totals are real points so far; "proj" adds projections for players yet to play and for what\'s left of games in progress. ' : '') + 'Recommended ' + L.proj_rec.toFixed(1) + ' (adj) · Sleeper-only best ' + L.proj_rec_sleeper.toFixed(1) +
