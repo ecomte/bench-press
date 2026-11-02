@@ -92,6 +92,8 @@ Alerts on the page are **Fix** (empty slot or an unavailable starter), **Swap** 
 
 **Defense check.** Bench Press ranks every team defense by its fantasy points per game this season in each league's scoring. When the defense in your recommended lineup is one of the 8 worst (`def_swap_ranks`), or faces one of the 8 offenses that give up the fewest points to defenses (the red matchup tag), the page adds a **Watch** alert that starts with "Defense check:" and says to consider swapping your defense, for example by picking one up off waivers. It's a warning only: it doesn't pick a replacement and doesn't add to the league button's bubble. Once your defense's game starts the alert goes away.
 
+**League buttons.** Each league button shows your record under the league name, in parentheses and a smaller font (ties included when there are any, e.g. `(5-2)` or `(4-3-1)`), and a thin win-chance bar along its bottom. The bar is the same estimate as the scoreboard's bar for that league and follows the Recommended / Sleeper / Current toggle: your share is on the left, green when you're favored and red when you're not. Once the week is final the bar is all green for a win or all red for a loss. A league with no matchup that week gets no bar. The red alert bubble on the button works as before.
+
 ## Configuration
 
 `config/config.json`:

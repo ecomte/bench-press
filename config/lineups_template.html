@@ -52,7 +52,12 @@ h1 a:hover{text-decoration:underline;text-decoration-color:var(--accent);text-un
 .byes{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px;align-items:center;font:12px var(--mono);color:var(--muted)}
 .chip{font:500 12px var(--mono);border:1px solid var(--line);border-radius:999px;padding:2px 8px;color:var(--ink)}
 .tabs{display:flex;gap:6px;flex-wrap:wrap;border-bottom:1px solid var(--line);padding-bottom:12px}
-.tab{position:relative;background:transparent;border:1px solid var(--line);color:var(--ink);border-radius:999px;padding:7px 15px;font:600 14px var(--body);cursor:pointer}
+.tab{position:relative;display:inline-flex;flex-direction:column;align-items:center;line-height:1.15;background:transparent;border:1px solid var(--line);color:var(--ink);border-radius:999px;padding:6px 16px 9px;font:600 14px var(--body);cursor:pointer}
+.tab .rec{font:500 11px var(--mono);color:var(--muted);margin-top:1px}
+.tab[aria-selected="true"] .rec{color:inherit;opacity:.75}
+.tab .wbar{position:absolute;inset:-1px;border-radius:inherit;overflow:hidden;display:flex;align-items:flex-end;gap:1px;pointer-events:none}
+.tab .wbar span{height:4px}
+.tab .wbar .up{background:var(--good)} .tab .wbar .down{background:var(--bad)}
 .tab:hover{border-color:var(--muted)}
 .tab[aria-selected="true"]{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
 .tab .dot{position:absolute;top:-4px;right:-4px;min-width:18px;height:18px;border-radius:9px;background:var(--bad);color:#fff;font:700 11px/18px var(--body);text-align:center;padding:0 4px}
@@ -274,6 +279,15 @@ function winPct(myLive, myProj, oLive, oProj) {
   return Math.min(99, Math.max(1, 50 * (1 + (z < 0 ? -erf : erf))));
 }
 
+// Win chance for a league's matchup (null with no opponent), shared by the league buttons and the scoreboard.
+function leagueWin(L) {
+  const o = L.opponent;
+  if (!o) return null;
+  const started = L.any_locked || !!o.started;
+  const myProj = mode === "rec" ? L.proj_rec : mode === "sleeper" ? L.proj_rec_sleeper : L.proj_cur;
+  return winPct(started ? (L.live_pts || 0) : 0, myProj, started ? (o.live || 0) : 0, o.proj);
+}
+
 function render() {
   if (DATA.placeholder) {  // live page before its first refresh
     $("#eyebrow").textContent = "Sleeper";
@@ -293,8 +307,15 @@ function render() {
   $("#byes").innerHTML = "Byes: " + (DATA.byes.length ? DATA.byes.map(t => '<span class="chip">' + esc(t) + '</span>').join("") : "none");
   $("#tabs").innerHTML = DATA.leagues.map(l => {
     const n = l.alerts.filter(a => a.level === "bad" || a.level === "change").length;
-    return '<button class="tab" role="tab" data-id="' + esc(l.id) + '" aria-selected="' + (l.id === tab) + '">' + esc(l.short) +
-      (n ? '<span class="dot">' + n + '</span>' : "") + '</button>';
+    // record under the name, and a thin win-chance bar along the bottom (green = your share when favored, red when not)
+    const p = leagueWin(l), me = p == null ? null : Math.round(p);
+    const bar = p == null ? "" : '<span class="wbar" title="Win chance ' + me + '%">' +
+      '<span class="' + (me >= 50 ? "up" : "down") + '" style="width:' + p.toFixed(1) + '%"></span>' +
+      '<span class="' + (100 - me >= 50 ? "up" : "down") + '" style="width:' + (100 - p).toFixed(1) + '%"></span></span>';
+    return '<button class="tab" role="tab" data-id="' + esc(l.id) + '" aria-selected="' + (l.id === tab) + '"' +
+      (p == null ? "" : ' aria-label="' + esc(l.short) + ', record ' + esc(l.record) + ', win chance ' + me + '%"') + '>' +
+      '<span class="nm">' + esc(l.short) + '</span>' + (l.record ? '<span class="rec">(' + esc(l.record) + ')</span>' : "") +
+      bar + (n ? '<span class="dot">' + n + '</span>' : "") + '</button>';
   }).join("");
   document.querySelectorAll(".tab").forEach(b => b.onclick = () => { tab = b.dataset.id; store.set("tab", tab); render(); });
 
@@ -321,7 +342,7 @@ function render() {
     '<div class="side right"><div class="t">' + esc(o ? o.team : "No matchup") + '</div>' + (o ? score(o.live, o.proj, false) : '<div class="n">–</div>') +
     '<div class="r">' + esc(o ? o.owner + " · " + o.record : "") + '</div></div>' +
     (o ? (() => {
-      const p = winPct(started ? (L.live_pts || 0) : 0, myProj, started ? (o.live || 0) : 0, o.proj);
+      const p = leagueWin(L);
       const me = Math.round(p), them = 100 - me;
       // green for whoever is favored, red for the underdog (an even game shows both green)
       const mine = me >= 50 ? "up" : "down", theirs = them >= 50 ? "up" : "down";
