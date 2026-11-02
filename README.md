@@ -1,6 +1,6 @@
 # Bench Press
 
-[![Release](https://img.shields.io/badge/release-v1.7.0-green)](https://github.com/ecomte/bench-press/releases)
+[![Release](https://img.shields.io/badge/release-v1.7.1-green)](https://github.com/ecomte/bench-press/releases)
 
 **Open Bench Press: [ecomte.github.io/bench-press](https://ecomte.github.io/bench-press/)**. Search your Sleeper username to see your lineups.
 
@@ -26,6 +26,7 @@ This repository is the GitHub version of Bench Press. It began as a set of scrip
 | 1.5.0 | Return watch alert for Out players still projected over a starter (BP-20), and auto-sub notes reworded now that Sleeper is known to swap the sub in after the starter's game. |
 | 1.6.0 | Defense check warning when your starting defense is one of the 8 worst this season or faces one of the 8 toughest offenses for defenses (BP-22). |
 | 1.7.0 | League buttons show your record under the league name and a green/red win-chance bar along the bottom that follows the lineup toggle (BP-24). |
+| 1.7.1 | Patch so losing looks losing: league button meters sit inside the button and fill red to your chance of losing when you're the underdog, and the scoreboard bar shows only your red share under 50% like Sleeper (BP-26). |
 
 Release notes for each version are on the [Releases page](https://github.com/ecomte/bench-press/releases). The original design and trade-offs are in [docs/static-site-plan.md](docs/static-site-plan.md).
 
@@ -93,7 +94,9 @@ Alerts on the page are **Fix** (empty slot or an unavailable starter), **Swap** 
 
 **Defense check.** Bench Press ranks every team defense by its fantasy points per game this season in each league's scoring. When the defense in your recommended lineup is one of the 8 worst (`def_swap_ranks`), or faces one of the 8 offenses that give up the fewest points to defenses (the red matchup tag), the page adds a **Watch** alert that starts with "Defense check:" and says to consider swapping your defense, for example by picking one up off waivers. It's a warning only: it doesn't pick a replacement and doesn't add to the league button's bubble. Once your defense's game starts the alert goes away.
 
-**League buttons.** Each league button shows your record under the league name, in parentheses and a smaller font (ties included when there are any, e.g. `(5-2)` or `(4-3-1)`), and a thin win-chance bar along its bottom. The bar is the same estimate as the scoreboard's bar for that league and follows the Recommended / Sleeper / Current toggle: your share is on the left, green when you're favored and red when you're not. Once the week is final the bar is all green for a win or all red for a loss. A league with no matchup that week gets no bar. The red alert bubble on the button works as before.
+**League buttons.** Each league button shows your record under the league name, in parentheses and a smaller font (ties included when there are any, e.g. `(5-2)` or `(4-3-1)`), and a small win-chance meter just above its bottom edge (inset so the rounded ends never hide it). The meter is the same estimate as the scoreboard's bar for that league and follows the Recommended / Sleeper / Current toggle. When you're favored it fills green to your win chance; when you're the underdog it flips and fills red to your chance of losing, so a 30% win chance shows 70% red. Once the week is final the meter is all green for a win or all red for a loss.
+
+**Scoreboard bar.** Like Sleeper's: at 50% or better it shows your green share then the opponent's red share; under 50% only your red share shows on an empty track, with the opponent's % in gray. Each colored piece keeps a small minimum width, so even a 1% chance shows as a red dot (BP-26). A league with no matchup that week gets no bar. The red alert bubble on the button works as before.
 
 ## Configuration
 
