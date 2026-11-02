@@ -1,6 +1,6 @@
 # Bench Press
 
-[![Release](https://img.shields.io/badge/release-v1.7.0-green)](https://github.com/ecomte/bench-press/releases)
+[![Release](https://img.shields.io/badge/release-v1.7.1-green)](https://github.com/ecomte/bench-press/releases)
 
 **Open Bench Press: [ecomte.github.io/bench-press](https://ecomte.github.io/bench-press/)**. Search your Sleeper username to see your lineups.
 
@@ -26,6 +26,7 @@ This repository is the GitHub version of Bench Press. It began as a set of scrip
 | 1.5.0 | Return watch alert for Out players still projected over a starter (BP-20), and auto-sub notes reworded now that Sleeper is known to swap the sub in after the starter's game. |
 | 1.6.0 | Defense check warning when your starting defense is one of the 8 worst this season or faces one of the 8 toughest offenses for defenses (BP-22). |
 | 1.7.0 | League buttons show your record under the league name and a green/red win-chance bar along the bottom that follows the lineup toggle (BP-24). |
+| 1.7.1 | Patch so losing looks losing: league button meters sit inside the button and fill red to your chance of losing when you're the underdog, and the scoreboard bar shows only your red share under 50% like Sleeper (BP-26). |
 
 Release notes for each version are on the [Releases page](https://github.com/ecomte/bench-press/releases). The original design and trade-offs are in [docs/static-site-plan.md](docs/static-site-plan.md).
 
