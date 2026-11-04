@@ -14,7 +14,7 @@
   --bg:#10151f; --panel:#18202f; --row:#1d2738; --row2:#222d40; --line:#2a3548;
   --ink:#eef2f8; --muted:#8f9bb0; --dim:#5e6a80;
   --accent:#f2a33a; --accent-ink:#1a1206;
-  --good:#3ccf8e; --bad:#ff5c6c; --warn:#f5c64a; --hold:#e8772e; --call:#b48cff; --info:#5fb3ff; --return:#2dd4bf;
+  --good:#3ccf8e; --bad:#ff5c6c; --warn:#f5c64a; --hold:#e8772e; --call:#b48cff; --info:#5fb3ff; --return:#2dd4bf; --wire:#f472b6;
   --qb:#fc2b6d; --rb:#20ceb8; --wr:#56c9f8; --te:#feae58; --k:#c96cff; --def:#bf755d;
   --dl:#e5785a; --lb:#8fbf4d; --db:#6f8cff;
   --display:"Big Shoulders Display",Impact,"Arial Narrow",sans-serif;
@@ -92,10 +92,10 @@ h1 a:hover{text-decoration:underline;text-decoration-color:var(--accent);text-un
 /* same red bubble as the league button: marks the Fix/Swap lines that the button's count is made of */
 .alerts li .adot{position:absolute;top:-4px;left:-5px;width:12px;height:12px;border-radius:50%;background:var(--bad);box-shadow:0 0 0 2px var(--bg)}
 .alerts li.bad{border-color:var(--bad)} .alerts li.change{border-color:var(--accent)} .alerts li.warn{border-color:var(--warn)}
-.alerts li.call{border-color:var(--call)} .alerts li.info{border-color:var(--info)} .alerts li.return{border-color:var(--return)}
+.alerts li.call{border-color:var(--call)} .alerts li.info{border-color:var(--info)} .alerts li.return{border-color:var(--return)} .alerts li.wire{border-color:var(--wire)}
 .alerts .lv{font:700 10px var(--mono);letter-spacing:.06em;text-transform:uppercase;margin-right:8px}
 .alerts li.bad .lv{color:var(--bad)} .alerts li.change .lv{color:var(--accent)} .alerts li.warn .lv{color:var(--warn)}
-.alerts li.call .lv{color:var(--call)} .alerts li.info .lv{color:var(--info)} .alerts li.return .lv{color:var(--return)}
+.alerts li.call .lv{color:var(--call)} .alerts li.info .lv{color:var(--info)} .alerts li.return .lv{color:var(--return)} .alerts li.wire .lv{color:var(--wire)}
 .sect{font:700 12px var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin:6px 0 -8px;display:flex;justify-content:space-between}
 .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;overflow:hidden}
 .prow{display:grid;grid-template-columns:46px 40px minmax(0,1fr) auto;gap:12px;align-items:center;padding:10px 14px;border-bottom:1px solid var(--line)}
@@ -293,9 +293,9 @@ function leagueWin(L) {
   return winPct(started ? (L.live_pts || 0) : 0, myProj, started ? (o.live || 0) : 0, o.proj);
 }
 
-// Alerts that count toward the red bubble on a league button (Fix and Swap). Return watch, Watch, Your call and
+// Alerts that count toward the red bubble on a league button (Fix, Swap and Waivers). Return watch, Watch, Your call and
 // Note don't; the same check marks those lines with a red dot inside the league so they stand out.
-const bubbles = a => a.level === "bad" || a.level === "change";
+const bubbles = a => a.level === "bad" || a.level === "change" || a.level === "wire";
 
 function render() {
   if (DATA.placeholder) {  // live page before its first refresh
@@ -367,8 +367,8 @@ function render() {
     ' · Your current lineup ' + L.proj_cur.toFixed(1) + ' (Sleeper proj)</div></div>';
   h += '<div class="seg" role="group">' + MODES.map(m => '<button data-m="' + m[0] + '" aria-pressed="' + (mode === m[0]) + '">' + m[1] + '</button>').join("") + '</div>';
   if (L.alerts.length) {
-    const lv = {bad: "Fix", change: "Swap", warn: "Watch", return: "Return watch", call: "Your call", info: "Note"};
-    const order = {bad: 0, change: 1, warn: 2, return: 3, call: 4, info: 5};
+    const lv = {bad: "Fix", change: "Swap", warn: "Watch", return: "Return watch", wire: "Waivers", call: "Your call", info: "Note"};
+    const order = {bad: 0, change: 1, warn: 2, return: 3, wire: 4, call: 5, info: 6};
     h += '<ul class="alerts">' + L.alerts.slice().sort((a, b) => order[a.level] - order[b.level])
       .map(a => '<li class="' + a.level + '"><span class="lv">' + lv[a.level] + '</span>' + esc(a.text) +
         (bubbles(a) ? '<span class="adot" title="Counts toward the red bubble on the league button" aria-hidden="true"></span>' : '') + '</li>').join("") + '</ul>';
@@ -417,6 +417,7 @@ function render() {
     'Matchup tag: <span class="mu tough">red = top-8 toughest</span> <span class="mu easy">green = top-8 easiest</span>. ' +
     '<span style="color:var(--return)">Return watch</span> flags a bench or IR player who is Out right now but still has a Sleeper projection higher than one of your starters, so he may be cleared by kickoff. ' +
     '<span style="color:var(--warn)">Defense check</span> warns when your defense is one of the 8 worst this season or faces one of the 8 toughest offenses for defenses, so you can consider swapping it. ' +
+    '<span style="color:var(--wire)">Waivers</span> flags starters (defenses too) projected under ' + (DATA.fa_min === undefined ? 5 : DATA.fa_min) + ' points when nothing on your bench does better, so check free agency for an upgrade. ' +
     'Orange rows are changes from your current Sleeper lineup. <span style="color:var(--good)">Green numbers</span> are real points from games already played (FINAL) or in progress (LIVE), with the projection underneath. Those players are locked, so they\'re never moved. ' +
     'Auto-subs: Sleeper doesn\'t flag them for outside apps. After a starter\'s game, Sleeper swaps the auto-sub into the lineup, and from then on the sub simply shows up here as a regular starter in that slot, with the points counted.</p>';
   $("#panel").innerHTML = h;
