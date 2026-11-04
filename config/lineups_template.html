@@ -88,7 +88,9 @@ h1 a:hover{text-decoration:underline;text-decoration-color:var(--accent);text-un
 .seg button{background:transparent;border:0;color:var(--muted);font:600 13px var(--body);padding:6px 12px;border-radius:8px;cursor:pointer}
 .seg button[aria-pressed="true"]{background:var(--row2);color:var(--ink)}
 .alerts{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
-.alerts li{background:var(--panel);border-left:3px solid var(--info);border-radius:6px;padding:8px 12px;font-size:14px}
+.alerts li{position:relative;background:var(--panel);border-left:3px solid var(--info);border-radius:6px;padding:8px 12px;font-size:14px}
+/* same red bubble as the league button: marks the Fix/Swap lines that the button's count is made of */
+.alerts li .adot{position:absolute;top:-4px;left:-5px;width:12px;height:12px;border-radius:50%;background:var(--bad);box-shadow:0 0 0 2px var(--bg)}
 .alerts li.bad{border-color:var(--bad)} .alerts li.change{border-color:var(--accent)} .alerts li.warn{border-color:var(--warn)}
 .alerts li.call{border-color:var(--call)} .alerts li.info{border-color:var(--info)} .alerts li.return{border-color:var(--return)}
 .alerts .lv{font:700 10px var(--mono);letter-spacing:.06em;text-transform:uppercase;margin-right:8px}
@@ -291,6 +293,10 @@ function leagueWin(L) {
   return winPct(started ? (L.live_pts || 0) : 0, myProj, started ? (o.live || 0) : 0, o.proj);
 }
 
+// Alerts that count toward the red bubble on a league button (Fix and Swap). Return watch, Watch, Your call and
+// Note don't; the same check marks those lines with a red dot inside the league so they stand out.
+const bubbles = a => a.level === "bad" || a.level === "change";
+
 function render() {
   if (DATA.placeholder) {  // live page before its first refresh
     $("#eyebrow").textContent = "Sleeper";
@@ -309,7 +315,7 @@ function render() {
     (DATA.no_proj && !DATA.week_over ? " Sleeper's week " + DATA.week + " projections didn't load on this device, so projected points show as 0." : "");
   $("#byes").innerHTML = "Byes: " + (DATA.byes.length ? DATA.byes.map(t => '<span class="chip">' + esc(t) + '</span>').join("") : "none");
   $("#tabs").innerHTML = DATA.leagues.map(l => {
-    const n = l.alerts.filter(a => a.level === "bad" || a.level === "change").length;
+    const n = l.alerts.filter(bubbles).length;
     // record under the name, and a small meter inset above the bottom edge (kept clear of the rounded ends):
     // favored = green filled to your win chance, underdog = flipped to red filled to your losing chance (30% win -> 70% red)
     const p = leagueWin(l), me = p == null ? null : Math.round(p);
@@ -364,7 +370,8 @@ function render() {
     const lv = {bad: "Fix", change: "Swap", warn: "Watch", return: "Return watch", call: "Your call", info: "Note"};
     const order = {bad: 0, change: 1, warn: 2, return: 3, call: 4, info: 5};
     h += '<ul class="alerts">' + L.alerts.slice().sort((a, b) => order[a.level] - order[b.level])
-      .map(a => '<li class="' + a.level + '"><span class="lv">' + lv[a.level] + '</span>' + esc(a.text) + '</li>').join("") + '</ul>';
+      .map(a => '<li class="' + a.level + '"><span class="lv">' + lv[a.level] + '</span>' + esc(a.text) +
+        (bubbles(a) ? '<span class="adot" title="Counts toward the red bubble on the league button" aria-hidden="true"></span>' : '') + '</li>').join("") + '</ul>';
   } else {
     h += '<ul class="alerts"><li class="info"><span class="lv" style="color:var(--good)">All set</span>Your Sleeper lineup already matches the recommendation.</li></ul>';
   }
