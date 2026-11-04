@@ -1,6 +1,6 @@
 # Bench Press
 
-[![Release](https://img.shields.io/badge/release-v1.7.1-green)](https://github.com/ecomte/bench-press/releases)
+[![Release](https://img.shields.io/badge/release-v1.7.2-green)](https://github.com/ecomte/bench-press/releases)
 
 **Open Bench Press: [ecomte.github.io/bench-press](https://ecomte.github.io/bench-press/)**. Search your Sleeper username to see your lineups.
 
@@ -27,6 +27,7 @@ This repository is the GitHub version of Bench Press. It began as a set of scrip
 | 1.6.0 | Defense check warning when your starting defense is one of the 8 worst this season or faces one of the 8 toughest offenses for defenses (BP-22). |
 | 1.7.0 | League buttons show your record under the league name and a green/red win-chance bar along the bottom that follows the lineup toggle (BP-24). |
 | 1.7.1 | Patch so losing looks losing: league button meters sit inside the button and fill red to your chance of losing when you're the underdog, and the scoreboard bar shows only your red share under 50% like Sleeper (BP-26). |
+| 1.7.2 | Red dots on the Fix and Swap alert lines inside a league, matching the red bubble on the league button, so you can see which alerts need a change in Sleeper (BP-28). |
 
 Release notes for each version are on the [Releases page](https://github.com/ecomte/bench-press/releases). The original design and trade-offs are in [docs/static-site-plan.md](docs/static-site-plan.md).
 
@@ -89,6 +90,8 @@ The first run takes about 20 seconds, because it downloads Sleeper's 5 MB player
 6. **Auto-subs.** Sleeper's public API shows whether a league allows auto-subs (`max_subs` in the league settings) but not which player anyone picked, and its matchup points leave the sub's score out until the swap happens. After the starter's game, Sleeper swaps the sub into the matchup's `starters` and `starters_points`, and `points` includes him (checked with `tools/autosub_probe.py`: on 2026-10-19 before Monday night DJ Moore was still listed with 0.0; on 2026-10-20 Keon Coleman was in his slot and the total matched the app). Bench Press reads matchup starters for the opponent, so it picks the sub up once he's swapped in. So in those leagues the page shows a note under the starters that auto-subs show up late and the Sleeper app's score can be higher until the swap. The auto-sub display and scoring code (`auto_subs()` in `analysis.py`, same in `web/benchpress.js`) is in place and kicks in if Sleeper ever adds the picks to the API; `AUTO_SUB_KEYS` is where to point it.
 
 Alerts on the page are **Fix** (empty slot or an unavailable starter), **Swap** (the recommended changes), **Watch** (Questionable starters, a Defense check, with an earlier-game bench player to use as an auto-sub when there is one, or a starter whose QB is out), **Return watch** (a bench or IR player who is Out right now but whose Sleeper projection still beats a starter he could replace, so he may be cleared by kickoff; see below), **Your call** (Sleeper's projections and the matchup data disagree, or a benched smash-spot player came close) and **Note** (tough matchups, early games, open IR spots, roster changes, auto-subs you've set). An auto-sub that is out, didn't play, or plays after its starter is a **Fix**; a Questionable starter with a working auto-sub moves from Watch to a Note.
+
+**Alert bubbles.** The red bubble on a league button counts that league's **Fix** and **Swap** alerts, the ones that need a change in Sleeper. Inside the league, each of those lines also gets a small red dot on its upper-left corner, so they stand out from Watch, Return watch, Your call and Note lines, which never add to the bubble (BP-28). Both use the same check in the page code (`bubbles()` in `config/lineups_template.html`).
 
 **Return watch.** Sleeper zeroes the projection of a player it expects to sit, but keeps projecting one who is listed Out (or IR or PUP) early in the week and may still be cleared, like a star coming back from a short injury. When such a player on your bench or in your IR slot projects at least 5 points (`return_watch_min`) and more than the weakest starter he could replace, the page adds a teal **Return watch** alert naming that starter and the player's game day. The player still isn't in the recommended lineup while he's Out; if he's cleared, swap him in. Once his game starts the alert goes away.
 
