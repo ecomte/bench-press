@@ -1,6 +1,6 @@
 # Bench Press
 
-[![Release](https://img.shields.io/badge/release-v1.7.2-green)](https://github.com/ecomte/bench-press/releases)
+[![Release](https://img.shields.io/badge/release-v1.8.0-green)](https://github.com/ecomte/bench-press/releases)
 
 **Open Bench Press: [ecomte.github.io/bench-press](https://ecomte.github.io/bench-press/)**. Search your Sleeper username to see your lineups.
 
@@ -28,6 +28,7 @@ This repository is the GitHub version of Bench Press. It began as a set of scrip
 | 1.7.0 | League buttons show your record under the league name and a green/red win-chance bar along the bottom that follows the lineup toggle (BP-24). |
 | 1.7.1 | Patch so losing looks losing: league button meters sit inside the button and fill red to your chance of losing when you're the underdog, and the scoreboard bar shows only your red share under 50% like Sleeper (BP-26). |
 | 1.7.2 | Red dots on the Fix and Swap alert lines inside a league, matching the red bubble on the league button, so you can see which alerts need a change in Sleeper (BP-28). |
+| 1.8.0 | Waivers alert: when a starter or defense in the recommended lineup projects under 5 with nothing better on the bench, check free agency; it counts toward the league button's red bubble (BP-30). |
 
 Release notes for each version are on the [Releases page](https://github.com/ecomte/bench-press/releases). The original design and trade-offs are in [docs/static-site-plan.md](docs/static-site-plan.md).
 
