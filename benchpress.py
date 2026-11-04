@@ -104,6 +104,7 @@ def main():
     SMASH_GAP = float(cfg.get("smash_alert_gap", 3.0))  # flag a benched smash spot this close to a starter
     RETURN_MIN = float(cfg.get("return_watch_min", 5.0))  # an Out player projected at least this much can get a Return watch
     DEF_N = int(cfg.get("def_swap_ranks", 8))  # a bottom-8 defense, or one facing a top-8 offense, gets a Defense check warning
+    FA_MIN = float(cfg.get("fa_check_min", 5.0))  # a starter projected under this, with nothing better on the bench, gets a Waivers nudge
     HISTORY = int(cfg.get("history_seasons", 5))  # past seasons used to spot players who beat tough defenses
     DECAY = float(cfg.get("history_decay", 0.7))  # each season back counts this much less (0.7, 0.49, ...)
     nick = cfg.get("league_nicknames", {}) if not (args.user and args.user.lstrip("@").lower() != cfg["username"].lower()) else {}
@@ -479,6 +480,16 @@ def main():
             why = A.def_swap_reason(p, def_ranks, DEF_N)
             if why:
                 alerts.append({"level": "warn", "text": "Defense check: %s %s. Consider swapping your defense this week." % (p["name"], why)})
+        # Waivers: a starter (or defense) projected under FA_MIN. The recommendation already took the best bench option,
+        # so nothing on the roster beats him; point to free agency (no specific pickups)
+        weak = []
+        for i, s in enumerate(slots):
+            p = P(rec[i]) if rec[i] else None
+            if p and not p["locked"] and p["adj"] < FA_MIN:
+                weak.append("%s (%.1f) at %s" % (p["name"], p["adj"], A.SLOT_LABEL.get(s, s)))
+        if weak:
+            alerts.append({"level": "wire", "text": "%s %s under %g, and nothing on your bench does better. Check free agency for a better option." % (
+                " and ".join([", ".join(weak[:-1]), weak[-1]] if len(weak) > 1 else weak), "projects" if len(weak) == 1 else "project", FA_MIN)})
         for x in rec:
             p = P(x)
             if p and p["locked"]:
@@ -753,7 +764,7 @@ def main():
         "owner": me.get("display_name") or uname, "is_me": not other,
         "sample": bool(os.environ.get("FF_FIXTURES")),
         "user_sheets": "data/sheets/%s/" % tag,
-        "season": season, "week": week, "byes": byes_now, "matchup_weight": W,
+        "season": season, "week": week, "byes": byes_now, "matchup_weight": W, "fa_min": FA_MIN,
         "current_week": current_week, "weeks": sched.weeks(), "week_over": sched.week_complete(week),
         "stats_weeks": sorted(weekly), "leagues": out_leagues,
         "username": tag,
