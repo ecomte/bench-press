@@ -388,6 +388,7 @@
     const smashGap = num(stat.smash_gap === undefined ? 3.0 : stat.smash_gap);
     const returnMin = num(stat.return_min === undefined ? 5.0 : stat.return_min);
     const defN = parseInt(stat.def_swap_ranks === undefined ? 8 : stat.def_swap_ranks, 10);
+    const faMin = num(stat.fa_min === undefined ? 5.0 : stat.fa_min);
     const logs = stat.logs || {};
     const inj = stat.injuries || {};
     const byesNow = sched.byes(week);
@@ -657,6 +658,18 @@
         const why = defSwapReason(p, defRanksL, defN);
         if (why) alerts.push({ level: "warn", text: "Defense check: " + p.name + " " + why + ". Consider swapping your defense this week." });
       });
+      // Waivers: a starter (or defense) projected under faMin. The recommendation already took the best bench option,
+      // so nothing on the roster beats him; point to free agency (no specific pickups)
+      const weak = [];
+      slots.forEach((s, i) => {
+        const p = rec[i] ? P(rec[i]) : null;
+        if (p && !p.locked && p.adj < faMin) weak.push(p.name + " (" + f1(p.adj) + ") at " + (SLOT_LABEL[s] || s));
+      });
+      if (weak.length) {
+        const list = weak.length > 1 ? weak.slice(0, -1).join(", ") + " and " + weak[weak.length - 1] : weak[0];
+        alerts.push({ level: "wire", text: list + " " + (weak.length === 1 ? "projects" : "project") + " under " + String(faMin) +
+          ", and nothing on your bench does better. Check free agency for a better option." });
+      }
       for (const x of rec) {
         const p = P(x);
         if (p && p.locked) continue;
@@ -769,7 +782,7 @@
       owner: me.display_name || uname, is_me: !other,
       sample: false,
       user_sheets: "data/sheets/" + tag + "/",
-      season, week, byes: byesNow, matchup_weight: W,
+      season, week, byes: byesNow, matchup_weight: W, fa_min: faMin,
       // for the week buttons: the week being played now, every week on the schedule, and
       // whether Sleeper had projections for the picked week (the build only copies the current one)
       current_week: currentWeek, weeks: sched.weeks(), week_over: sched.weekComplete(week), no_proj: !projList.length,
